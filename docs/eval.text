@@ -1,0 +1,136 @@
+Phase 9 → AI Safety, Guardrails, Quality & Evaluation
+│
+├── 9.1  Input Guardrails & Weather Domain Validation
+│   ├── Weather-domain relevance classification
+│   ├── Out-of-scope query rejection
+│   ├── Allow conversational weather follow-ups
+│   ├── Input normalization
+│   ├── Empty/oversized input validation
+│   └── Graceful rejection responses
+│
+├── 9.2  Prompt Security & Prompt-Level Guardrails
+│   ├── Strong system/agent instructions
+│   ├── Weather-domain boundary enforcement
+│   ├── Prompt injection detection
+│   ├── Jailbreak resistance
+│   ├── Instruction hierarchy protection
+│   └── Prevent system-prompt disclosure
+│
+├── 9.3  Content Safety & Data Protection Guardrails
+│   ├── Unsafe/harmful content handling
+│   ├── Sensitive information handling
+│   ├── PII awareness
+│   ├── Secret/API-key leakage prevention
+│   └── Safe error messages
+│
+├── 9.4  Tool Access & Execution Guardrails
+│   ├── Tool allowlisting
+│   ├── Tool argument validation
+│   ├── City/location validation
+│   ├── Correct tool selection
+│   ├── Prevent unauthorized tool execution
+│   ├── Tool timeout/error handling
+│   └── Tool failure fallback behavior
+│
+├── 9.5  Output Guardrails & Response Validation
+│   ├── Weather-domain response validation
+│   ├── Off-topic output detection
+│   ├── Hallucination detection
+│   ├── Tool-output grounding validation
+│   ├── Unsupported-claim detection
+│   ├── Response completeness checks
+│   └── Safe fallback responses
+│
+├── 9.6  LLM Response Evaluation
+│   ├── Relevance
+│   ├── Correctness
+│   ├── Groundedness / faithfulness
+│   ├── Instruction adherence
+│   ├── Domain adherence
+│   ├── Hallucination rate
+│   ├── Response quality
+│   └── LLM-as-a-Judge evaluation
+│
+├── 9.7  Agent & Tool-Calling Evaluation
+│   ├── Tool-selection accuracy
+│   ├── Tool-argument accuracy
+│   ├── Unnecessary tool-call detection
+│   ├── Multi-tool reasoning evaluation
+│   ├── Tool failure recovery
+│   ├── Agent task completion
+│   └── Agent trajectory evaluation
+│
+├── 9.8  Multi-Turn Conversation & Session Evaluation
+│   ├── Follow-up understanding
+│   ├── Context retention
+│   ├── Context isolation between sessions
+│   ├── New Conversation behavior
+│   ├── Clear Chat behavior
+│   ├── Ambiguous follow-up handling
+│   └── Context poisoning resistance
+│
+├── 9.9  Human-in-the-Loop (HITL)
+│   ├── Define human-review conditions
+│   ├── Low-confidence escalation
+│   ├── Evaluation-failure escalation
+│   ├── High-risk weather-advice escalation
+│   ├── Review queue
+│   ├── Approve / Edit / Reject workflow
+│   ├── Reviewer feedback capture
+│   └── Audit trail
+│
+├── 9.10 Evaluation Dataset / Golden Dataset
+│   ├── Current-weather questions
+│   ├── Forecast questions
+│   ├── Weather analytics
+│   ├── Planning questions
+│   ├── Multi-turn conversations
+│   ├── Ambiguous queries
+│   ├── Invalid locations
+│   ├── Out-of-domain questions
+│   ├── Prompt injection attacks
+│   ├── Tool-selection scenarios
+│   └── Failure/edge cases
+│
+├── 9.11 Automated Evaluation & Regression Test Suite
+│   ├── Deterministic evaluations
+│   ├── LLM-based evaluations
+│   ├── Guardrail unit tests
+│   ├── Agent integration tests
+│   ├── Golden-dataset regression tests
+│   ├── Pass/fail thresholds
+│   └── CI-ready evaluation execution
+│
+├── 9.12 Evaluation Metrics & Quality Reports
+│   ├── Domain adherence %
+│   ├── Correct refusal %
+│   ├── False refusal %
+│   ├── Tool-selection accuracy %
+│   ├── Groundedness score
+│   ├── Hallucination rate
+│   ├── Task success rate
+│   ├── HITL escalation rate
+│   ├── Error rate
+│   ├── Response latency
+│   └── Evaluation summary report
+│
+├── 9.13 Guardrail & Evaluation Observability
+│   ├── Guardrail decision logging
+│   ├── Evaluation score logging
+│   ├── Tool-call logging
+│   ├── HITL decision logging
+│   ├── Rejection reason tracking
+│   └── Failure-category tracking
+│
+└── 9.14 Phase 9 End-to-End Safety & Quality Testing
+    ├── Valid weather request
+    ├── Multi-turn weather conversation
+    ├── Out-of-domain request
+    ├── Prompt injection attempt
+    ├── Invalid location
+    ├── Tool/API failure
+    ├── Hallucination scenario
+    ├── Low-quality response
+    ├── HITL escalation
+    ├── Human approval/rejection
+    └── Full regression suite
