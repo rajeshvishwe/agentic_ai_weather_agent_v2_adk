@@ -4,10 +4,14 @@ Weather API routes.
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import HTTPException
 
 from weather_intelligence_agent_v2.core.dependencies import (
     get_async_weather_planning_service,
     get_weather_chat_service,
+)
+from weather_intelligence_agent_v2.guardrails.exceptions import (
+    InputValidationError,
 )
 from weather_intelligence_agent_v2.schemas.mapper import (
     WeatherPlanningMapper,
@@ -96,10 +100,22 @@ async def weather_chat(
     Send a conversational request to the weather agent.
     """
 
-    response = await chat_service.chat(
-        session_id=request.session_id,
-        message=request.message,
-    )
+    try:
+
+        response = await chat_service.chat(
+            session_id=request.session_id,
+            message=request.message,
+        )
+
+    except InputValidationError as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": exc.error_code,
+                "message": exc.message,
+            },
+        ) from exc
 
     return WeatherChatResponse(
         session_id=request.session_id,
