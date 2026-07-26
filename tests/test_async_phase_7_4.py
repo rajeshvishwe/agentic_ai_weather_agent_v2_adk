@@ -14,6 +14,10 @@ and are intended as integration tests.
 """
 
 import asyncio
+from collections.abc import AsyncIterator
+
+import pytest
+import pytest_asyncio
 
 from weather_intelligence_agent_v2.models import (
     CurrentWeather,
@@ -38,6 +42,29 @@ TEST_CITIES = [
     "London",
     "Tokyo",
 ]
+
+
+pytestmark = pytest.mark.asyncio
+
+
+@pytest_asyncio.fixture
+async def service() -> AsyncIterator[AsyncWeatherService]:
+    """
+    Provide an initialized asynchronous weather service.
+
+    The fixture owns the AsyncWeatherService lifecycle so that
+    the underlying aiohttp ClientSession is created before each
+    test and reliably closed after the test completes.
+
+    Yields:
+        AsyncWeatherService:
+            Initialized asynchronous weather service instance.
+    """
+
+    async with AsyncWeatherService(
+        max_concurrency=5
+    ) as weather_service:
+        yield weather_service
 
 
 async def test_current_weather(
@@ -256,9 +283,11 @@ async def test_async_weather_planning(
         "\n"
         "=========================================="
     )
+
     print(
         "TEST 4: Async Weather Planning"
     )
+
     print(
         "=========================================="
     )
@@ -335,6 +364,9 @@ async def test_async_weather_planning(
 async def run_tests() -> None:
     """
     Execute all Phase 7.4 async integration tests.
+
+    This function preserves the original standalone execution
+    capability of the Phase 7.4 integration test module.
     """
 
     print(

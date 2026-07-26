@@ -9,10 +9,17 @@ The application exposes:
 - weather intelligence APIs
 - conversational weather APIs
 - Human-in-the-Loop approval APIs
+- Prometheus metrics
+- OpenTelemetry HTTP tracing
+- Prometheus HTTP request metrics
 - health endpoint
 """
 
 from __future__ import annotations
+
+import truststore
+
+truststore.inject_into_ssl()
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -21,6 +28,13 @@ from pathlib import Path
 import aiohttp
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from opentelemetry.instrumentation.aiohttp_client import (
+    AioHttpClientInstrumentor,
+)
+from opentelemetry.instrumentation.fastapi import (
+    FastAPIInstrumentor,
+)
+from prometheus_client import make_asgi_app
 
 from weather_intelligence_agent_v2.api.approval_routes import (
     router as approval_router,
@@ -34,6 +48,15 @@ from weather_intelligence_agent_v2.config.constants import (
 from weather_intelligence_agent_v2.core.settings import (
     settings,
 )
+from weather_intelligence_agent_v2.observability.http_metrics import (
+    http_metrics_middleware,
+)
+from weather_intelligence_agent_v2.observability.logging import (
+    configure_log_correlation,
+)
+from weather_intelligence_agent_v2.observability.tracing import (
+    configure_tracing,
+)
 from weather_intelligence_agent_v2.services.async_weather_planning_service import (
     AsyncWeatherPlanningService,
 )
@@ -45,11 +68,22 @@ from weather_intelligence_agent_v2.services.weather_chat_service import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 load_dotenv(
     dotenv_path=PROJECT_ROOT / ".env"
 )
+
+
+# ------------------------------------------------------------
+# OpenTelemetry bootstrap
+# ------------------------------------------------------------
+
+configure_tracing()
+
+configure_log_correlation()
+
+AioHttpClientInstrumentor().instrument()
 
 
 @asynccontextmanager
@@ -128,6 +162,17 @@ app = FastAPI(
 
 
 # ------------------------------------------------------------
+# Phase 11.16 — Prometheus HTTP Metrics
+# ------------------------------------------------------------
+
+app.middleware(
+    "http"
+)(
+    http_metrics_middleware
+)
+
+
+# ------------------------------------------------------------
 # Weather Intelligence API
 # ------------------------------------------------------------
 
@@ -142,6 +187,18 @@ app.include_router(
 
 app.include_router(
     approval_router
+)
+
+
+# ------------------------------------------------------------
+# Phase 11.3 — Prometheus Metrics
+# ------------------------------------------------------------
+
+metrics_app = make_asgi_app()
+
+app.mount(
+    "/metrics",
+    metrics_app,
 )
 
 
@@ -163,3 +220,13 @@ def health() -> dict[str, str]:
         "application": settings.app_name,
         "version": settings.version,
     }
+
+
+# ------------------------------------------------------------
+# Phase 11.10 — FastAPI OpenTelemetry Tracing
+# ------------------------------------------------------------
+
+FastAPIInstrumentor.instrument_app(
+    app,
+    excluded_urls="health,metrics",
+)

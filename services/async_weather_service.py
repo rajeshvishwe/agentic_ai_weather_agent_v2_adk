@@ -14,6 +14,7 @@ Responsibilities:
   exponential backoff with jitter.
 - Support externally managed HTTP sessions for application
   lifecycle integration.
+- Record Prometheus metrics for external weather API calls.
 
 Business logic, analytics, formatting, and presentation concerns
 must not be implemented in this service.
@@ -22,6 +23,7 @@ must not be implemented in this service.
 import asyncio
 import random
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, Awaitable, Callable
 
 import aiohttp
@@ -41,6 +43,11 @@ from weather_intelligence_agent_v2.models import (
     CurrentWeather,
     Forecast,
     ForecastDay,
+)
+from weather_intelligence_agent_v2.observability.weather_api_metrics import (
+    WEATHER_API_DURATION_SECONDS,
+    WEATHER_API_FAILURES_TOTAL,
+    WEATHER_API_REQUESTS_TOTAL,
 )
 
 
@@ -368,6 +375,29 @@ class AsyncWeatherService:
             delay,
         )
 
+    @staticmethod
+    def _get_metric_endpoint(
+        url: str,
+    ) -> str:
+        """
+        Return a stable logical endpoint name for weather API metrics.
+
+        Args:
+            url:
+                External weather API URL.
+
+        Returns:
+            Low-cardinality logical endpoint name.
+        """
+
+        if "geocoding-api.open-meteo.com" in url:
+            return "geocoding"
+
+        if "api.open-meteo.com" in url:
+            return "forecast"
+
+        return "unknown"
+
     async def _get_json(
         self,
         url: str,
@@ -387,6 +417,9 @@ class AsyncWeatherService:
 
         Non-retryable HTTP errors fail immediately.
 
+        Prometheus metrics record one logical external API operation,
+        including all retry attempts and backoff time.
+
         Args:
             url:
                 Target API URL.
@@ -398,85 +431,111 @@ class AsyncWeatherService:
             Parsed JSON response.
         """
 
-        session = await self._ensure_session()
+        endpoint = self._get_metric_endpoint(
+            url
+        )
 
-        for attempt in range(
-            1,
-            self._retry_config.max_attempts + 1,
-        ):
-            try:
+        WEATHER_API_REQUESTS_TOTAL.labels(
+            endpoint=endpoint,
+        ).inc()
 
-                async with session.get(
-                    url,
-                    params=params,
-                ) as response:
+        start_time = perf_counter()
 
-                    if (
-                        response.status
-                        in self.RETRYABLE_STATUS_CODES
-                    ):
+        try:
+            session = await self._ensure_session()
+
+            for attempt in range(
+                1,
+                self._retry_config.max_attempts + 1,
+            ):
+                try:
+
+                    async with session.get(
+                        url,
+                        params=params,
+                    ) as response:
 
                         if (
-                            attempt
-                            >= self._retry_config.max_attempts
+                            response.status
+                            in self.RETRYABLE_STATUS_CODES
                         ):
-                            response.raise_for_status()
 
-                        retry_after = (
-                            self._get_retry_after_seconds(
-                                response
-                            )
-                        )
-
-                        delay = (
-                            retry_after
-                            if retry_after is not None
-                            else self._calculate_backoff_delay(
+                            if (
                                 attempt
+                                >= self._retry_config.max_attempts
+                            ):
+                                response.raise_for_status()
+
+                            retry_after = (
+                                self._get_retry_after_seconds(
+                                    response
+                                )
                             )
+
+                            delay = (
+                                retry_after
+                                if retry_after is not None
+                                else self._calculate_backoff_delay(
+                                    attempt
+                                )
+                            )
+
+                            await self._sleep(
+                                delay
+                            )
+
+                            continue
+
+                        response.raise_for_status()
+
+                        data: dict[str, Any] = (
+                            await response.json()
                         )
 
-                        await self._sleep(
-                            delay
-                        )
+                        return data
 
-                        continue
-
-                    response.raise_for_status()
-
-                    data: dict[str, Any] = (
-                        await response.json()
-                    )
-
-                    return data
-
-            except aiohttp.ClientResponseError:
-                raise
-
-            except (
-                aiohttp.ClientError,
-                asyncio.TimeoutError,
-            ):
-
-                if (
-                    attempt
-                    >= self._retry_config.max_attempts
-                ):
+                except aiohttp.ClientResponseError:
                     raise
 
-                delay = (
-                    self._calculate_backoff_delay(
+                except (
+                    aiohttp.ClientError,
+                    asyncio.TimeoutError,
+                ):
+
+                    if (
                         attempt
+                        >= self._retry_config.max_attempts
+                    ):
+                        raise
+
+                    delay = (
+                        self._calculate_backoff_delay(
+                            attempt
+                        )
                     )
-                )
 
-                await self._sleep(
-                    delay
-                )
+                    await self._sleep(
+                        delay
+                    )
 
-        raise RuntimeError(
-            "HTTP retry loop exited unexpectedly."
-        )
+            raise RuntimeError(
+                "HTTP retry loop exited unexpectedly."
+            )
+
+        except Exception:
+            WEATHER_API_FAILURES_TOTAL.labels(
+                endpoint=endpoint,
+            ).inc()
+
+            raise
+
+        finally:
+            WEATHER_API_DURATION_SECONDS.labels(
+                endpoint=endpoint,
+            ).observe(
+                perf_counter()
+                - start_time
+            )
 
     async def _get_coordinates(
         self,

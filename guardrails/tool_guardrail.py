@@ -6,6 +6,9 @@ tool is allowed to run.
 
 Phase 9.4 uses deterministic validation so authorization decisions are
 predictable, auditable, and testable.
+
+Phase 11 observability records Prometheus metrics when tool execution is
+blocked while preserving the existing deterministic validation behavior.
 """
 
 from __future__ import annotations
@@ -22,6 +25,9 @@ from weather_intelligence_agent_v2.guardrails.validators.tool_argument_validator
 from weather_intelligence_agent_v2.guardrails.validators.tool_name_validator import (
     ToolNameValidator,
 )
+from weather_intelligence_agent_v2.observability.security_metrics import (
+    TOOL_GUARDRAIL_BLOCKS_TOTAL,
+)
 
 
 class ToolGuardrail:
@@ -34,6 +40,9 @@ class ToolGuardrail:
     2. Validate tool arguments.
 
     If tool-name validation fails, argument validation is not executed.
+
+    Prometheus metrics are emitted only when validation rejects the
+    requested tool execution.
     """
 
     def __init__(self) -> None:
@@ -52,6 +61,12 @@ class ToolGuardrail:
         """
         Validate a requested tool execution.
 
+        Validation remains fail-fast.
+
+        Tool-name failures are recorded separately from tool-argument
+        failures so operational monitoring can distinguish authorization
+        blocks from invalid-argument blocks.
+
         Args:
             tool_name:
                 Name of the tool requested by the agent.
@@ -65,14 +80,31 @@ class ToolGuardrail:
                 satisfy the configured security policy.
         """
 
-        tool_name_result = self._tool_name_validator.validate(
-            tool_name
+        tool_name_result = (
+            self._tool_name_validator.validate(
+                tool_name
+            )
         )
 
         if not tool_name_result.is_valid:
+
+            TOOL_GUARDRAIL_BLOCKS_TOTAL.labels(
+                validation_stage="tool_name",
+            ).inc()
+
             return tool_name_result
 
-        return self._tool_argument_validator.validate(
-            tool_name=tool_name,
-            arguments=arguments,
+        argument_result = (
+            self._tool_argument_validator.validate(
+                tool_name=tool_name,
+                arguments=arguments,
+            )
         )
+
+        if not argument_result.is_valid:
+
+            TOOL_GUARDRAIL_BLOCKS_TOTAL.labels(
+                validation_stage="tool_arguments",
+            ).inc()
+
+        return argument_result

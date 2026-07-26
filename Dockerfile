@@ -6,14 +6,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY requirements.txt /app/requirements.txt
 
 RUN python -m pip install --no-cache-dir --upgrade pip \
-    && python -m pip install --no-cache-dir -r requirements.txt
+    && python -m pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app/weather_intelligence_agent_v2
-
-WORKDIR /app
 
 EXPOSE 8080
 

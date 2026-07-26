@@ -8,18 +8,22 @@ to generate actionable weather recommendations.
 from weather_intelligence_agent_v2.analytics.forecast_analytics import (
     ForecastAnalytics,
 )
-
 from weather_intelligence_agent_v2.analytics.weather_intelligence import (
     WeatherIntelligence,
 )
-
+from weather_intelligence_agent_v2.observability.tool_tracing import (
+    trace_tool,
+)
 from weather_intelligence_agent_v2.services.weather_service import (
     get_7_day_forecast,
     get_weather_multiple,
 )
 
 
-def get_weather_intelligence(city: str) -> dict:
+@trace_tool("get_weather_intelligence")
+def get_weather_intelligence(
+    city: str,
+) -> dict:
     """
     Generate weather intelligence for a city.
 
@@ -31,11 +35,22 @@ def get_weather_intelligence(city: str) -> dict:
     - Weather alerts
     - Weather recommendations
     - Weather risk
+
+    Args:
+        city:
+            City to analyze.
+
+    Returns:
+        Structured weather intelligence response.
     """
 
-    weather_list = get_weather_multiple([city])
+    weather_list = get_weather_multiple(
+        [city]
+    )
 
-    forecast = get_7_day_forecast(city)
+    forecast = get_7_day_forecast(
+        city
+    )
 
     rainiest_day = ForecastAnalytics.rainiest_day(
         forecast

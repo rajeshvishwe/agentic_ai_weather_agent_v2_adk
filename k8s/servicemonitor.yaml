@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+
+metadata:
+  name: weather-intelligence-agent
+  labels:
+    release: monitoring
+
+spec:
+  selector:
+    matchLabels:
+      app: weather-intelligence-agent
+
+  namespaceSelector:
+    matchNames:
+      - default
+
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

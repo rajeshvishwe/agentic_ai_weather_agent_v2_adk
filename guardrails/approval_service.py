@@ -8,6 +8,10 @@ local development and testing.
 
 A distributed persistence layer can later replace this implementation
 without changing the approval domain model.
+
+Prometheus metrics record approval-request creation and final approval
+outcomes without exposing request identifiers, tool arguments, or other
+potentially sensitive values.
 """
 
 from __future__ import annotations
@@ -19,6 +23,10 @@ from weather_intelligence_agent_v2.guardrails.approval_models import (
 )
 from weather_intelligence_agent_v2.guardrails.config.hitl_policy import (
     ApprovalLevel,
+)
+from weather_intelligence_agent_v2.observability.security_metrics import (
+    HITL_APPROVAL_OUTCOMES_TOTAL,
+    HITL_APPROVAL_REQUESTS_TOTAL,
 )
 
 
@@ -34,6 +42,7 @@ class ApprovalService:
     - retrieving requests
     - approving requests
     - rejecting requests
+    - emitting HITL Prometheus metrics
     """
 
     def __init__(self) -> None:
@@ -42,6 +51,38 @@ class ApprovalService:
         """
 
         self._requests: dict[str, ApprovalRequest] = {}
+
+    @staticmethod
+    def _approval_level_label(
+        approval_level: ApprovalLevel,
+    ) -> str:
+        """
+        Return a stable Prometheus label for an approval level.
+
+        Args:
+            approval_level:
+                HITL approval level.
+
+        Returns:
+            str:
+                Stable approval-level label.
+        """
+
+        value = getattr(
+            approval_level,
+            "value",
+            None,
+        )
+
+        if isinstance(
+            value,
+            str,
+        ):
+            return value
+
+        return str(
+            approval_level
+        )
 
     def create_request(
         self,
@@ -74,7 +115,15 @@ class ApprovalService:
             approval_level=approval_level,
         )
 
-        self._requests[request.request_id] = request
+        self._requests[
+            request.request_id
+        ] = request
+
+        HITL_APPROVAL_REQUESTS_TOTAL.labels(
+            approval_level=self._approval_level_label(
+                approval_level
+            ),
+        ).inc()
 
         return request
 
@@ -99,7 +148,10 @@ class ApprovalService:
         """
 
         try:
-            return self._requests[request_id]
+            return self._requests[
+                request_id
+            ]
+
         except KeyError as exc:
             raise KeyError(
                 "Approval request was not found."
@@ -127,6 +179,10 @@ class ApprovalService:
 
         request.approve()
 
+        HITL_APPROVAL_OUTCOMES_TOTAL.labels(
+            status="approved",
+        ).inc()
+
         return request
 
     def reject(
@@ -150,5 +206,9 @@ class ApprovalService:
         )
 
         request.reject()
+
+        HITL_APPROVAL_OUTCOMES_TOTAL.labels(
+            status="rejected",
+        ).inc()
 
         return request

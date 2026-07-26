@@ -1,27 +1,25 @@
 """
-File:
-weather_intelligence_agent_v2/tools/planning_tools.py
+Weather planning tool exposed to Google ADK.
 
-Phase:
-6.9 - Structured Outputs
-
-Purpose:
-Google ADK tool exposing the enterprise
-Weather Planning orchestration service.
-
-This tool delegates all business logic to the
-WeatherPlanningService and returns a JSON-
-serializable representation of the planning model.
+This module exposes the enterprise Weather Planning
+orchestration service while keeping business logic inside
+the service layer.
 """
 
 from dataclasses import asdict
 
+from weather_intelligence_agent_v2.observability.tool_tracing import (
+    trace_tool,
+)
 from weather_intelligence_agent_v2.services.weather_planning_service import (
     WeatherPlanningService,
 )
 
 
-def get_weather_plan(city: str) -> dict:
+@trace_tool("get_weather_plan")
+def get_weather_plan(
+    city: str,
+) -> dict:
     """
     Generate a complete weather planning report.
 
@@ -46,4 +44,6 @@ def get_weather_plan(city: str) -> dict:
         city
     )
 
-    return asdict(plan)
+    return asdict(
+        plan
+    )

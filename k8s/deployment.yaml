@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: weather-intelligence-agent
+  labels:
+    app: weather-intelligence-agent
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: weather-intelligence-agent
+
+  template:
+    metadata:
+      labels:
+        app: weather-intelligence-agent
+
+    spec:
+      containers:
+        - name: weather-intelligence-agent
+          image: weather-intelligence-agent:v2-arm64
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: weather-intelligence-agent-config
+
+            - secretRef:
+                name: weather-intelligence-agent-secret
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3

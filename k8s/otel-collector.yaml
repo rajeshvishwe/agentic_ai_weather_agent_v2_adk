@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: otel-collector
+  namespace: monitoring
+  labels:
+    app: otel-collector
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: otel-collector
+
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector:0.157.0
+          imagePullPolicy: IfNotPresent
+
+          args:
+            - --config=/etc/otelcol/config.yaml
+
+          ports:
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+
+---
+
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: otel-collector
+  namespace: monitoring
+  labels:
+    app: otel-collector
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: otel-collector
+
+  ports:
+    - name: otlp-http
+      protocol: TCP
+      port: 4318
+      targetPort: otlp-http

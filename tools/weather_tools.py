@@ -7,11 +7,15 @@ Google ADK tools.
 Business logic remains inside the service layer.
 """
 
+from weather_intelligence_agent_v2.observability.tool_tracing import (
+    trace_tool,
+)
 from weather_intelligence_agent_v2.services.async_weather_service import (
     AsyncWeatherService,
 )
 
 
+@trace_tool("get_current_weather")
 async def get_current_weather(
     city: str,
 ) -> dict:

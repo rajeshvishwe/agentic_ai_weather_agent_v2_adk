@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: weather-intelligence-agent-service
+  labels:
+    app: weather-intelligence-agent
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: weather-intelligence-agent
+
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080

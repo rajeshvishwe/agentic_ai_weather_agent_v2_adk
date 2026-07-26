@@ -5,12 +5,18 @@ This module wraps the production weather forecast
 service for use by Google ADK.
 """
 
+from weather_intelligence_agent_v2.observability.tool_tracing import (
+    trace_tool,
+)
 from weather_intelligence_agent_v2.services.weather_service import (
     get_7_day_forecast,
 )
 
 
-def get_forecast(city: str) -> dict:
+@trace_tool("get_forecast")
+def get_forecast(
+    city: str,
+) -> dict:
     """
     Retrieve the seven-day weather forecast.
 
@@ -21,9 +27,18 @@ def get_forecast(city: str) -> dict:
     - forecast
     - rain prediction
     - future weather
+
+    Args:
+        city:
+            City name.
+
+    Returns:
+        Structured seven-day forecast response.
     """
 
-    forecast = get_7_day_forecast(city)
+    forecast = get_7_day_forecast(
+        city
+    )
 
     return {
         "city": forecast.city,
