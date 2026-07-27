@@ -1,302 +1,461 @@
-# Weather Intelligence Agent v2
+# 🌦️ Weather Intelligence Agent v2
 
-> Production-style Agentic AI weather intelligence application built with Google ADK, Gemini, FastAPI, async Python, Docker, Kubernetes, Prometheus, Grafana, OpenTelemetry, deterministic guardrails, and HITL.
+A production-oriented **Agentic AI Weather Intelligence Platform** built with **Google ADK, Gemini, FastAPI, Streamlit, Open-Meteo, Docker, Kubernetes, Prometheus, Grafana, and OpenTelemetry**.
 
-**Current release:** Phase 11 complete · **Automated tests:** 129 passed · **Phase 12:** Deferred
+The project demonstrates how a conversational Generative AI application can move beyond a basic LLM chatbot into a structured, observable, guarded, containerized, and deployable AI system.
 
 ---
 
-
 ## 1. Project Overview
 
+Weather Intelligence Agent v2 provides two complementary user experiences:
 
-Weather Intelligence Agent v2 is an enterprise-style Generative AI and
-Agentic AI application for conversational weather intelligence.
+### 📊 Weather Dashboard
 
-The project combines Google ADK, Gemini, FastAPI, asynchronous Python
-services, external weather APIs, deterministic AI guardrails,
-human-in-the-loop approval capabilities, Docker, Kubernetes, Prometheus,
-Grafana, and OpenTelemetry.
+A structured weather intelligence dashboard supporting:
 
-The application accepts natural-language weather questions, executes an
-agentic workflow, calls weather tools and external APIs when required,
-and returns a validated natural-language response.
+* Current weather
+* 7-day temperature forecast
+* Daily forecast
+* Rain probability visualization
+* Weather analytics
+* AI weather intelligence and recommendations
 
-**Example request:**
+### 💬 AI Assistant
 
+A conversational weather assistant supporting:
 
-```text
-What is the current weather in Delhi?
-```
+* Natural-language weather questions
+* Current weather
+* Weather forecasts
+* Multi-city comparisons
+* Weather-related planning
+* Multi-turn conversational context
+* Contextual follow-up questions such as:
 
-**Example response:**
+  * `What about tomorrow?`
+  * `What about Mumbai?`
 
+The application uses **FastAPI as the backend boundary**, while the Streamlit frontend communicates with the backend through a dedicated API client.
 
-```text
-The current weather in Delhi is overcast with a temperature of 33°C.
-The wind is blowing at 2.5 km/h from the east-northeast.
-```
-
+---
 
 ## 2. High-Level Architecture
 
-
-User / Client | v FastAPI | v WeatherChatService | +———————-+ | Input
-Guardrail | +———————-+ | v Google ADK Runner | v Weather Intelligence
-Agent | +———————-+ | Tool Guardrail | | HITL Approval | +———————-+ | v
-Async Weather Services | v Open-Meteo APIs | v Agent Response | v Output
-Guardrail | v FastAPI Response
-
-**Observability:**
-
-FastAPI / ADK / Tools / Weather APIs / Guardrails / HITL | +–>
-Prometheus –> Grafana | +–> OpenTelemetry –> OTEL Collector | +–>
-Application Logs
-
-**Deployment:**
-
-Application | v Docker Image | v Kubernetes / Minikube | +–> Deployment
-+–> Service +–> ConfigMap +–> Secret +–> ServiceMonitor +–>
-OpenTelemetry Collector
-
-
-## 3. Core Technology Stack
-
-
-Language: - Python 3.13
-
-Agentic AI: - Google Agent Development Kit (Google ADK) - Gemini /
-Google GenAI integration - ADK Runner - ADK session management - ADK
-tool execution
-
-API: - FastAPI - Uvicorn
-
-Data validation and models: - Pydantic-based application models
-
-Async processing: - asyncio - aiohttp
-
-Weather provider: - Open-Meteo Geocoding API - Open-Meteo Forecast API
-
-Security: - Input guardrails - Output guardrails - Tool guardrails -
-Human-in-the-loop approval workflow
-
-Containerization: - Docker - ARM64 image support
-
-Orchestration: - Kubernetes - Minikube
-
-Monitoring: - Prometheus - kube-prometheus-stack - Grafana
-
-Observability: - OpenTelemetry - OTEL Collector - Prometheus metrics -
-structured application logging - trace/log correlation
-
-Testing: - pytest - asynchronous integration tests - guardrail tests -
-API and integration tests
-
-
-## 4. Important Application Components
-
-
-4.1 Google ADK Agent
-
-The root agent represents the primary conversational weather agent.
-
-Google ADK provides: - agent orchestration - model interaction - tool
-invocation - event streaming - conversation execution
-
-WeatherChatService intentionally encapsulates ADK Runner access so that
-the API and UI layers do not communicate directly with the ADK runtime.
-
-4.2 WeatherChatService
-
-WeatherChatService is the application service responsible for: - input
-validation - ADK session management - ADK execution - final response
-extraction - output validation - ADK tracing - ADK execution metrics -
-guardrail metrics
-
-**Typical execution flow:**
-
-
-## 1. Receive Session Id And Message.
-
-
-## 2. Validate The User Input.
-
-
-## 3. Reject Invalid Input Before Model Execution.
-
-
-## 4. Ensure An Adk Conversation Session Exists.
-
-
-## 5. Increment Adk Execution Metrics.
-
-
-## 6. Start An Opentelemetry Adk Span.
-
-
-## 7. Execute The Root Agent.
-
-
-## 8. Extract The Final Adk Response.
-
-
-## 9. Record Adk Latency.
-
-
-## 10. Validate The Generated Response.
-
-
-## 11. Return The Validated Response Or Safe Fallback.
-
-
-4.3 Async Weather Service
-
-The asynchronous weather service communicates with external Open-Meteo
-APIs.
-
-The service supports: - location/geocoding lookup - current weather
-retrieval - forecast retrieval - concurrent weather operations -
-timeout/error handling - OpenTelemetry spans - Prometheus
-request/failure/latency metrics
-
-The asynchronous design allows multiple independent weather operations
-to run without blocking the application’s event loop.
-
-4.4 Async Weather Planning
-
-The project includes asynchronous weather planning/orchestration capable
-of coordinating weather operations across multiple cities.
-
-Integration tests validate: - current weather - forecast - multi-city
-weather - asynchronous weather planning
-
-
-## 5. Ai Guardrails
-
-
-The project uses deterministic guardrails instead of adding unnecessary
-LLM calls for security decisions.
-
-5.1 Input Guardrail
-
-Input validation executes before Google ADK.
-
-If validation fails: - ADK execution is prevented - InputValidationError
-is raised - Prometheus input-block metric is incremented
-
-**Metric:**
-
-
 ```text
-weather_agent_input_guardrail_blocks_total
+┌───────────────────────────────────────────────────────────┐
+│                    Streamlit Frontend                     │
+│                                                           │
+│     📊 Weather Dashboard        💬 AI Assistant           │
+└──────────────────────────┬────────────────────────────────┘
+                           │
+                           │ HTTP
+                           ▼
+┌───────────────────────────────────────────────────────────┐
+│                       FastAPI                             │
+│                                                           │
+│   Health │ Metrics │ Weather Planning │ Chat │ HITL       │
+└──────────────────────────┬────────────────────────────────┘
+                           │
+                           ▼
+┌───────────────────────────────────────────────────────────┐
+│                  Application Services                     │
+│                                                           │
+│   Weather Chat │ Async Weather │ Planning │ Analytics     │
+└───────────────┬───────────────────────────┬───────────────┘
+                │                           │
+                ▼                           ▼
+┌──────────────────────────┐    ┌───────────────────────────┐
+│        Guardrails        │    │        Google ADK         │
+│                          │    │                           │
+│ Input Validation         │    │ Root Weather Agent        │
+│ Prompt Injection         │    │ Session Management        │
+│ Weather Domain           │    │ Tool Orchestration        │
+│ Tool Validation          │    │ Multi-turn Context        │
+│ Output Validation        │    │                           │
+│ HITL                     │    └──────────────┬────────────┘
+└──────────────────────────┘                   │
+                                               ▼
+                                    ┌──────────────────────┐
+                                    │        Gemini        │
+                                    └──────────┬───────────┘
+                                               │
+                                               ▼
+                                    ┌──────────────────────┐
+                                    │    Weather Tools     │
+                                    │                      │
+                                    │ Current Weather      │
+                                    │ Forecast             │
+                                    │ Analytics            │
+                                    │ Planning             │
+                                    └──────────┬───────────┘
+                                               │
+                                               ▼
+                                    ┌──────────────────────┐
+                                    │      Open-Meteo      │
+                                    │  External Weather API│
+                                    └──────────────────────┘
 ```
 
-5.2 Output Guardrail
+---
 
-Output validation executes after the agent produces its final response
-but before the response reaches the API/UI boundary.
+## 3. Technology Stack
 
-If validation fails, the application returns a deterministic safe
-fallback message.
+| Layer               | Technology              |
+| ------------------- | ----------------------- |
+| Agent Framework     | Google ADK              |
+| LLM                 | Google Gemini           |
+| Backend API         | FastAPI                 |
+| Frontend            | Streamlit               |
+| Weather Provider    | Open-Meteo              |
+| Validation          | Pydantic                |
+| Async HTTP          | aiohttp                 |
+| Containerization    | Docker                  |
+| Orchestration       | Kubernetes / Minikube   |
+| Metrics             | Prometheus              |
+| Dashboarding        | Grafana                 |
+| Distributed Tracing | OpenTelemetry           |
+| Testing             | pytest / pytest-asyncio |
+| Language            | Python 3.13             |
 
-**Metric:**
+---
 
+## 4. Core Capabilities
+
+### Agentic AI
+
+The application uses Google ADK to provide:
+
+* Agent execution
+* Tool orchestration
+* Gemini integration
+* Session-aware conversations
+* Multi-turn context
+* Controlled tool execution
+* Agent observability
+
+### Weather Intelligence
+
+The backend supports:
+
+* Current weather retrieval
+* Forecast retrieval
+* Forecast analytics
+* Weather insights
+* Rain analysis
+* Weather planning
+* Multi-city conversational comparison
+* Structured dashboard responses
+
+### Conversational Intelligence
+
+Example:
 
 ```text
-weather_agent_output_guardrail_blocks_total
+User:
+What is the current weather in Delhi?
+
+Assistant:
+The current weather in Delhi...
+
+User:
+What about tomorrow?
+
+Assistant:
+Tomorrow in Delhi...
 ```
 
-5.3 Tool Guardrail
+The second question does not explicitly repeat the city.
 
-ToolGuardrail uses fail-fast deterministic validation.
+Conversation context is maintained by the backend session rather than by duplicating weather reasoning inside Streamlit.
 
-**Validation sequence:**
+---
 
+## 5. Streamlit User Interface
+
+The frontend is located under:
 
 ```text
-ToolNameValidator
-       |
-       v
-ToolArgumentValidator
+ui/
+├── api_client.py
+├── config.py
+├── streamlit_app.py
+└── components/
+    ├── weather_chat.py
+    └── weather_dashboard.py
 ```
 
-If tool-name validation fails, argument validation is not executed.
+The application provides two main views.
 
-Blocked tool operations are classified using low-cardinality
-**validation-stage labels:**
+### 📊 Weather Dashboard
 
+The dashboard contains:
 
 ```text
-validation_stage="tool_name"
-validation_stage="tool_arguments"
+🌤️ Current Weather
+📈 7-Day Temperature Forecast
+📅 Daily Forecast
+🌧️ Rain Probability
+📊 Weather Analytics
+🧠 AI Weather Intelligence
 ```
 
-**Metric:**
+A user enters a city and the frontend requests structured weather intelligence from FastAPI.
 
+The Streamlit layer remains presentation-focused and does not directly call Open-Meteo or Google ADK.
+
+### 💬 AI Assistant
+
+The conversational interface provides a ChatGPT-style weather experience.
+
+Example questions:
 
 ```text
-weather_agent_tool_guardrail_blocks_total
+What is the current weather in Delhi?
+
+Give me the 7-day forecast for Mumbai.
+
+Compare the weather in Delhi and London.
+
+Is it a good day for outdoor activities in Bengaluru?
+
+What about tomorrow?
 ```
 
+---
 
-## 6. Human-In-The-Loop (Hitl)
+## 6. Request Flow
 
-
-ApprovalService provides an in-memory human approval workflow.
-
-Supported operations: - create_request() - get_request() - approve() -
-reject()
-
-The implementation is intentionally lightweight for local development
-and learning. A distributed persistence layer can replace the in-memory
-store in a future production-hardening phase.
-
-**Prometheus metrics:**
-
+A typical conversational request follows this sequence:
 
 ```text
-weather_agent_hitl_approval_requests_total
-
-weather_agent_hitl_approval_outcomes_total
+User
+ ↓
+Streamlit AI Assistant
+ ↓
+WeatherApiClient
+ ↓
+FastAPI
+ ↓
+Input Guardrail
+ ↓
+Conversation Session
+ ↓
+Google ADK Root Agent
+ ↓
+Gemini
+ ↓
+Weather Tool
+ ↓
+Open-Meteo
+ ↓
+Tool Result
+ ↓
+Gemini Response
+ ↓
+Output Guardrail
+ ↓
+FastAPI Response
+ ↓
+Streamlit
+ ↓
+User
 ```
 
-**Outcome labels include:**
-
+A structured dashboard request follows:
 
 ```text
-status="approved"
-status="rejected"
+City
+ ↓
+Streamlit Weather Dashboard
+ ↓
+WeatherApiClient
+ ↓
+FastAPI Weather Planning API
+ ↓
+Weather Services
+ ↓
+Open-Meteo
+ ↓
+Analytics / Intelligence
+ ↓
+Structured Response
+ ↓
+Dashboard Visualizations
 ```
 
-Sensitive request IDs and tool arguments are not exposed as Prometheus
-labels.
+---
 
+## 7. Google ADK Architecture
 
-## 7. Fastapi
+The project uses Google ADK as the agent orchestration layer.
 
+The agent is responsible for:
 
-FastAPI provides the HTTP application boundary.
+* Understanding user weather intent
+* Maintaining conversational context
+* Selecting appropriate tools
+* Calling weather functionality
+* Interpreting tool results
+* Producing natural-language responses
 
-**Validated endpoints during the project include:**
+The ADK execution path is wrapped with observability and guardrail controls.
 
-**Health:**
-
+Conceptually:
 
 ```text
-GET /health
+Input
+ ↓
+Input Guardrail
+ ↓
+ADK Session
+ ↓
+Root Agent
+ ↓
+Gemini
+ ↓
+Tool Selection
+ ↓
+Tool Guardrail
+ ↓
+Weather Tool
+ ↓
+External Weather API
+ ↓
+Agent Response
+ ↓
+Output Guardrail
+ ↓
+Final Response
 ```
 
-**Example:**
+---
 
+## 8. AI Guardrails
+
+The project contains a dedicated guardrail layer under:
 
 ```text
-curl http://localhost:8000/health
+guardrails/
 ```
 
-**Expected structure:**
+The implementation includes:
 
+* Input guardrails
+* Prompt-injection detection
+* Weather-domain validation
+* Contextual weather follow-up validation
+* Tool-name validation
+* Tool-argument validation
+* Output guardrails
+* Response-integrity validation
+* Leakage validation
+* Human-in-the-loop controls
+
+### Input Validation
+
+Requests are validated before model execution.
+
+The goal is to prevent:
+
+* Unsupported requests
+* Prompt injection
+* Invalid characters/input structures
+* Out-of-domain requests
+
+### Contextual Follow-ups
+
+A contextual validator allows weather-related follow-up questions when a valid weather conversation already exists.
+
+Example:
 
 ```text
+What is the weather in Delhi?
+What about tomorrow?
+```
+
+### Tool Guardrails
+
+Tool execution is validated independently from model generation.
+
+This reduces the risk of:
+
+* Unauthorized tool names
+* Invalid tool arguments
+* Unexpected tool execution
+
+### Output Guardrails
+
+Generated model responses are validated before they are returned to the caller.
+
+---
+
+## 9. Human-in-the-Loop
+
+The project contains HITL components including:
+
+```text
+guardrails/
+├── approval_models.py
+├── approval_service.py
+├── hitl_guardrail.py
+└── config/
+    └── hitl_policy.py
+```
+
+FastAPI also exposes approval-related routes.
+
+The architecture supports:
+
+```text
+Agent Tool Request
+       ↓
+HITL Policy
+       ↓
+Approval Required?
+   ┌───┴────┐
+   │        │
+  No       Yes
+   │        │
+Execute   Pending Approval
+            │
+       ┌────┴────┐
+       │         │
+    Approve    Reject
+```
+
+This pattern provides a foundation for controlling sensitive agent actions.
+
+---
+
+## 10. FastAPI
+
+FastAPI provides the application boundary between clients and AI/weather services.
+
+Important API capabilities include:
+
+```text
+GET  /health
+GET  /metrics
+
+GET  /weather/plan/{city}
+POST /weather/plan
+POST /weather/chat
+```
+
+The project also contains HITL approval routes for retrieving and responding to approval requests.
+
+### Health Check
+
+Example:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Example response:
+
+```json
 {
   "status": "UP",
   "application": "Weather Intelligence Agent",
@@ -304,1145 +463,880 @@ curl http://localhost:8000/health
 }
 ```
 
-**Weather conversation:**
+---
 
-
-```text
-POST /weather/chat
-```
-
-**Example:**
-
-
-```text
-curl -X POST "http://localhost:8000/weather/chat" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "weather-test-001",
-    "message": "What is the current weather in Delhi?"
-  }'
-```
-
-**Prometheus metrics:**
-
-
-```text
-GET /metrics
-```
-
-**Example:**
-
-
-```text
-curl http://localhost:8000/metrics
-```
-
-
-## 8. Prometheus Metrics
-
-
-The application exposes operational metrics across several layers.
-
-8.1 HTTP Metrics
-
-**Examples include:**
-
-
-```text
-weather_agent_http_requests_total
-weather_agent_http_errors_total
-weather_agent_http_request_duration_seconds
-```
-
-These provide: - request volume - HTTP failures - request latency
-
-8.2 ADK Metrics
-
-
-```text
-weather_agent_adk_executions_total
-weather_agent_adk_execution_duration_seconds
-```
-
-These measure: - agent executions - ADK execution latency
-
-8.3 Tool Metrics
-
-**Examples include:**
-
-
-```text
-weather_agent_tool_calls_total
-weather_agent_tool_failures_total
-weather_agent_tool_execution_duration_seconds
-```
-
-These provide: - tool invocation count - tool failure count - tool
-execution latency
-
-8.4 External Weather API Metrics
-
-
-```text
-weather_agent_weather_api_requests_total
-weather_agent_weather_api_failures_total
-weather_agent_weather_api_duration_seconds
-```
-
-**Endpoint labels include:**
-
-
-```text
-endpoint="geocoding"
-endpoint="forecast"
-```
-
-During validation, both geocoding and forecast requests were
-successfully visible through the /metrics endpoint.
-
-8.5 Security Metrics
-
-
-```text
-weather_agent_input_guardrail_blocks_total
-weather_agent_output_guardrail_blocks_total
-weather_agent_tool_guardrail_blocks_total
-```
-
-8.6 HITL Metrics
-
-
-```text
-weather_agent_hitl_approval_requests_total
-weather_agent_hitl_approval_outcomes_total
-```
-
-
-## 9. Opentelemetry
-
-
-OpenTelemetry provides distributed tracing across important application
-boundaries.
-
-Instrumentation implemented through Phase 11 covers: - incoming FastAPI
-requests - Google ADK execution - tool execution - external weather API
-operations - application logging correlation
-
-**Conceptual trace:**
-
-
-```text
-HTTP request
-    |
-    v
-FastAPI server span
-    |
-    v
-adk.agent.execute
-    |
-    v
-tool span
-    |
-    v
-external weather API span
-```
-
-ADK span attributes include concepts such as: - genai.system -
-genai.agent.name - genai.application.name - ADK event count - whether a
-final response was generated
-
-The project also includes OpenTelemetry Collector Kubernetes
-configuration.
-
-
-## 10. Logging
-
-
-Application logging is integrated with observability instrumentation.
-
-Logs generated inside active spans can inherit trace/span identifiers,
-supporting correlation between: - logs - traces - application operations
-
-Examples of logged events include: - ADK execution started - ADK
-execution completed - guardrail blocks
-
-Sensitive prompt content should not be unnecessarily placed into logs or
-metric labels.
-
-
-## 11. Docker
-
-
-The application is containerized with Docker.
-
-**Final validated development image tag:**
-
-
-```text
-weather-intelligence-agent:v2.3-arm64
-```
-
-**Build:**
-
-
-```text
-docker build \
-  --platform linux/arm64 \
-  -t weather-intelligence-agent:v2.3-arm64 .
-```
-
-**Verify image architecture:**
-
-
-```text
-docker image inspect \
-  weather-intelligence-agent:v2.3-arm64 \
-  --format '{{.Architecture}}'
-```
-
-**Expected on the validated Mac/Minikube environment:**
-
-
-```text
-arm64
-```
-
-
-## 12. Kubernetes / Minikube
-
-
-The application was deployed and validated on local Kubernetes using
-Minikube.
-
-Core Kubernetes resources include: - Deployment - Service - ConfigMap -
-Secret - ServiceMonitor - OpenTelemetry Collector resources
-
-**Example resource application:**
-
-
-```text
-kubectl apply -f k8s/
-```
-
-**Check pods:**
-
-
-```text
-kubectl get pods
-```
-
-**Expected application state:**
-
-
-```text
-READY 1/1
-STATUS Running
-```
-
-**Check deployment:**
-
-
-```text
-kubectl get deployment weather-intelligence-agent
-```
-
-**Check service:**
-
-
-```text
-kubectl get service weather-intelligence-agent-service
-```
-
-12.1 Loading the Local Image into Minikube
-
-
-```text
-minikube image load weather-intelligence-agent:v2.3-arm64
-```
-
-**Verify:**
-
-
-```text
-minikube image ls | grep weather-intelligence-agent
-```
-
-12.2 Updating the Deployment Image
-
-
-```text
-kubectl set image \
-  deployment/weather-intelligence-agent \
-  weather-intelligence-agent=weather-intelligence-agent:v2.3-arm64
-```
-
-**Check rollout:**
-
-
-```text
-kubectl rollout status deployment/weather-intelligence-agent
-```
-
-12.3 Port Forwarding
-
-**Application:**
-
-
-```text
-kubectl port-forward \
-  service/weather-intelligence-agent-service \
-  8081:8080
-```
-
-The application can then be accessed through localhost:8081.
-
-
-## 13. Kubernetes Secrets
-
-
-The project uses Kubernetes Secret resources for sensitive
-configuration.
-
-**IMPORTANT:**
-
-Never commit real API keys to Git.
-
-When defining a standard Kubernetes Secret using the data field, values
-**must be base64 encoded. Invalid base64 values produce errors such as:**
-
-
-```text
-Secret in version "v1" cannot be handled as a Secret:
-illegal base64 data
-```
-
-**Secrets can be inspected with:**
-
-
-```text
-kubectl get secret weather-intelligence-agent-secret
-```
-
-Do not expose decoded secret values in documentation, screenshots, logs,
-or source control.
-
-The local .env file should also remain excluded from Git.
-
-
-## 14. Prometheus
-
-
-Prometheus is deployed through kube-prometheus-stack.
-
-The project uses a ServiceMonitor so Prometheus can discover and scrape
-the Weather Intelligence Agent metrics endpoint.
-
-**Verify Prometheus monitoring components:**
-
-
-```text
-kubectl get pods -n monitoring
-```
-
-**Prometheus port-forward:**
-
-
-```text
-kubectl port-forward \
-  -n monitoring \
-  service/monitoring-kube-prometheus-prometheus \
-  9090:9090
-```
-
-**Example API query:**
-
-
-```text
-curl -sG \
-  'http://localhost:9090/api/v1/query' \
-  --data-urlencode 'query=weather_agent_adk_executions_total'
-```
-
-**Other useful queries:**
-
-
-```text
-weather_agent_tool_calls_total
-
-weather_agent_weather_api_requests_total
-
-up{service="weather-intelligence-agent-service"}
-```
-
-When manually calling the Prometheus HTTP API, URL encoding via
-–data-urlencode is recommended for PromQL expressions containing braces,
-quotes, or equals signs.
-
-
-## 15. Grafana
-
-
-Grafana is deployed as part of the monitoring stack.
-
-**Port-forward:**
-
-
-```text
-kubectl port-forward \
-  -n monitoring \
-  service/monitoring-grafana \
-  3000:80
-```
-
-**Default username:**
-
-
-```text
-admin
-```
-
-**Retrieve the generated administrator password:**
-
-
-```text
-kubectl get secret \
-  -n monitoring \
-  monitoring-grafana \
-  -o jsonpath='{.data.admin-password}' \
-  | base64 --decode
-```
-
-The percent sign sometimes displayed immediately after the password in
-the terminal is the shell prompt, not part of the password.
-
-15.1 Dashboard Structure
-
-**The completed dashboard can be organized into these rows:**
-
-Availability: - Weather Agent Status - Running Pods - Available
-Replicas - Pod Restarts
-
-HTTP: - HTTP Request Rate - HTTP Error Rate - FastAPI p95 Latency
-
-Google ADK: - ADK Agent Executions - ADK p95 Latency
-
-Tools: - Tool Calls - Tool Failures - Tool p95 Latency
-
-Weather API: - Weather API Requests - Weather API Failures - Weather API
-p95 Latency
-
-Security / HITL: - Input Guardrail Blocks - Output Guardrail Blocks -
-Tool Guardrail Blocks - HITL Approval Requests - HITL Outcomes
-
-Kubernetes Resources: - Pod CPU - Pod Memory
-
-
-## 16. Example Grafana / Promql Queries
-
-
-**HTTP request rate:**
-
-
-```text
-sum(
-  rate(
-    weather_agent_http_requests_total[5m]
-  )
-)
-```
-
-**HTTP error rate:**
-
-
-```text
-sum(
-  rate(
-    weather_agent_http_errors_total[5m]
-  )
-)
-```
-
-**FastAPI p95 latency:**
-
-
-```text
-histogram_quantile(
-  0.95,
-  sum by (le) (
-    rate(
-      weather_agent_http_request_duration_seconds_bucket[5m]
-    )
-  )
-)
-```
-
-**ADK executions:**
-
-
-```text
-sum(
-  weather_agent_adk_executions_total
-)
-```
-
-**ADK p95 latency:**
-
-
-```text
-histogram_quantile(
-  0.95,
-  sum by (le) (
-    rate(
-      weather_agent_adk_execution_duration_seconds_bucket[5m]
-    )
-  )
-)
-```
-
-**Tool calls:**
-
-
-```text
-sum by (tool_name) (
-  weather_agent_tool_calls_total
-)
-```
-
-**Weather API requests:**
-
-
-```text
-sum by (endpoint) (
-  weather_agent_weather_api_requests_total
-)
-```
-
-**Weather API p95 latency:**
-
-
-```text
-histogram_quantile(
-  0.95,
-  sum by (endpoint, le) (
-    rate(
-      weather_agent_weather_api_duration_seconds_bucket[5m]
-    )
-  )
-)
-```
-
-**Tool guardrail blocks:**
-
-
-```text
-sum by (validation_stage) (
-  weather_agent_tool_guardrail_blocks_total
-)
-```
-
-**HITL outcomes:**
-
-
-```text
-sum by (status) (
-  weather_agent_hitl_approval_outcomes_total
-)
-```
-
-
-## 17. Metrics Server
-
-
-**Kubernetes resource commands such as:**
-
-
-```text
-kubectl top pods
-kubectl top nodes
-```
-
-require Metrics Server.
-
-**If the Metrics API is unavailable, verify:**
-
-
-```text
-kubectl get pods -n kube-system | grep metrics-server
-```
-
-A newly started Metrics Server may need time before metrics become
-available.
-
-
-## 18. Testing
-
-
-**The final validated regression result through Phase 11 was:**
-
-
-```text
-129 passed
-```
-
-**Full test command from the GenAI_Projects parent directory:**
-
-
-```text
-weather_intelligence_agent_v2/.venv/bin/python \
-  -m pytest weather_intelligence_agent_v2/tests -q
-```
-
-**Validated result:**
-
-
-```text
-129 passed
-```
-
-The test suite includes coverage for multiple application layers,
-including: - weather models/services - asynchronous weather operations -
-planning - guardrails - tool guardrails - ADK tool-guardrail callback
-behavior - HITL integration - approval routes - API/application
-integration
-
-18.1 Async Integration Tests
-
-The Phase 7.4 integration tests make real calls to Open-Meteo.
-
-They validate: - current weather - seven-day forecast - multi-city
-weather - async weather planning
-
-Because these tests call HTTPS services, local certificate configuration
-can affect them.
-
-
-## 19. Macos / Python Ssl Note
-
-
-During development, Python 3.13 initially failed to validate the
-**Open-Meteo certificate chain:**
-
-
-```text
-CERTIFICATE_VERIFY_FAILED
-unable to get local issuer certificate
-```
-
-The installed truststore package was validated successfully.
-
-**Example diagnostic:**
-
-
-```text
-import truststore
-truststore.inject_into_ssl()
-```
-
-After injecting the native system trust store, an HTTPS request to the
-Open-Meteo geocoding API returned HTTP 200.
-
-This was an environment/certificate trust issue rather than an
-Open-Meteo application failure.
-
-Do not disable SSL certificate verification as a permanent workaround.
-
-
-## 20. Local Development
-
-
-**Typical setup:**
-
-
-```text
-cd /Users/rajeshvishwe/GenAI_Projects/weather_intelligence_agent_v2
-```
-
-**Activate the virtual environment:**
-
-
-```text
-source .venv/bin/activate
-```
-
-Install dependencies using the dependency file maintained by the
-repository.
-
-**Ensure the required environment configuration is available in:**
-
-
-```text
-.env
-```
-
-Never commit real API credentials.
-
-
-## 21. Start Fastapi Locally
-
-
-**From the parent project directory:**
-
-
-```text
-cd /Users/rajeshvishwe/GenAI_Projects
-```
-
-**Run:**
-
-
-```text
-weather_intelligence_agent_v2/.venv/bin/python \
-  -m uvicorn weather_intelligence_agent_v2.api.app:app \
-  --host 0.0.0.0 \
-  --port 8000
-```
-
-**Health check:**
-
-
-```text
-curl http://localhost:8000/health
-```
-
-**Metrics:**
-
-
-```text
-curl http://localhost:8000/metrics
-```
-
-**Weather chat:**
-
-
-```text
-curl -X POST "http://localhost:8000/weather/chat" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "local-test-001",
-    "message": "What is the current weather in Delhi?"
-  }'
-```
-
-
-## 22. Environment Loading
-
-
-The project .env resides inside the weather_intelligence_agent_v2
-project directory.
-
-During debugging it was confirmed that importing the application loaded
-the GOOGLE_API_KEY into the application process even when the shell
-itself did not already contain that variable.
-
-**This distinction is important:**
-
-Shell environment: os.getenv(…) may initially be empty.
-
-Application environment: application startup can load values from the
-project .env.
-
-Do not print complete API keys while debugging.
-
-
-## 23. Project Structure
-
-
-The exact repository may contain additional files, but the major
-**structure implemented through Phase 11 follows this organization:**
-
+## 11. Project Structure
 
 ```text
 weather_intelligence_agent_v2/
-|
-+-- agent.py
-|
-+-- api/
-|   +-- app.py
-|   +-- approval_routes.py
-|
-+-- services/
-|   +-- weather_chat_service.py
-|   +-- async_weather_service.py
-|   +-- async_weather_planning_service.py
-|
-+-- models/
-|   +-- weather models
-|   +-- weather_planning.py
-|
-+-- guardrails/
-|   +-- input_guardrail.py
-|   +-- output_guardrail.py
-|   +-- tool_guardrail.py
-|   +-- adk_tool_guardrail_callback.py
-|   +-- approval_service.py
-|   +-- approval_models.py
-|   +-- exceptions.py
-|   +-- config/
-|   +-- validators/
-|
-+-- observability/
-|   +-- tracing.py
-|   +-- agent_metrics.py
-|   +-- weather_api_metrics.py
-|   +-- security_metrics.py
-|   +-- additional tracing/metrics modules
-|
-+-- tests/
-|   +-- guardrails/
-|   +-- test_async_phase_7_4.py
-|   +-- additional unit/integration tests
-|
-+-- k8s/
-|   +-- deployment.yaml
-|   +-- service.yaml
-|   +-- configmap.yaml
-|   +-- secret.yaml (local/sensitive)
-|   +-- servicemonitor.yaml
-|   +-- OpenTelemetry Collector configuration
-|
-+-- Dockerfile
-+-- .env
-+-- dependency/configuration files
+│
+├── agent.py
+├── architecture.md
+├── Dockerfile
+├── README.md
+├── requirements.txt
+│
+├── analytics/
+│   ├── forecast_analytics.py
+│   ├── insight_engine.py
+│   ├── weather_analytics.py
+│   └── weather_intelligence.py
+│
+├── api/
+│   ├── app.py
+│   ├── approval_routes.py
+│   └── routes.py
+│
+├── benchmarks/
+│   └── benchmark.py
+│
+├── config/
+│   ├── city_aliases.py
+│   ├── city_resolver.py
+│   ├── constants.py
+│   └── prompts.py
+│
+├── core/
+│   ├── dependencies.py
+│   └── settings.py
+│
+├── docs/
+│   ├── architecture.md
+│   └── eval.text
+│
+├── formatters/
+│   └── formatter.py
+│
+├── guardrails/
+│   ├── adk_tool_guardrail_callback.py
+│   ├── approval_models.py
+│   ├── approval_service.py
+│   ├── hitl_guardrail.py
+│   ├── input_guardrail.py
+│   ├── models.py
+│   ├── output_guardrail.py
+│   ├── tool_guardrail.py
+│   ├── weather_domain_validator.py
+│   │
+│   ├── config/
+│   │   ├── hitl_policy.py
+│   │   ├── intent_vocabulary.py
+│   │   ├── output_policy.py
+│   │   ├── prompt_patterns.py
+│   │   ├── prompt_policy.py
+│   │   └── tool_policy.py
+│   │
+│   └── validators/
+│       ├── base_validator.py
+│       ├── character_validator.py
+│       ├── contextual_weather_followup_validator.py
+│       ├── leakage_validator.py
+│       ├── length_validator.py
+│       ├── output_length_validator.py
+│       ├── pipeline.py
+│       ├── prompt_injection_validator.py
+│       ├── response_integrity_validator.py
+│       ├── tool_argument_validator.py
+│       ├── tool_name_validator.py
+│       └── weather_intent_validator.py
+│
+├── k8s/
+│   ├── configmap.yaml
+│   ├── deployment.yaml
+│   ├── otel-collector-config.yaml
+│   ├── otel-collector.yaml
+│   ├── secret.yaml
+│   ├── service.yaml
+│   └── servicemonitor.yaml
+│
+├── observability/
+│   ├── agent_metrics.py
+│   ├── http_metrics.py
+│   ├── logging.py
+│   ├── security_metrics.py
+│   ├── tool_metrics.py
+│   ├── tool_tracing.py
+│   ├── tracing.py
+│   └── weather_api_metrics.py
+│
+├── services/
+│   └── ...
+│
+├── tools/
+│   └── ...
+│
+├── ui/
+│   ├── api_client.py
+│   ├── config.py
+│   ├── streamlit_app.py
+│   │
+│   └── components/
+│       ├── weather_chat.py
+│       └── weather_dashboard.py
+│
+└── tests/
+    ├── conftest.py
+    ├── test_api.py
+    ├── test_async_phase_7_4.py
+    │
+    └── guardrails/
+        ├── test_adk_tool_guardrail_callback.py
+        ├── test_approval_routes.py
+        ├── test_approval_routes_app_integration.py
+        ├── test_approval_service.py
+        ├── test_hitl_approval_request_integration.py
+        ├── test_hitl_callback_integration.py
+        ├── test_hitl_guardrail.py
+        ├── test_input_guardrail.py
+        ├── test_output_guardrail.py
+        ├── test_output_guardrail_api.py
+        ├── test_output_guardrail_integration.py
+        ├── test_prompt_injection_validator.py
+        ├── test_tool_argument_validator.py
+        ├── test_tool_guardrail.py
+        ├── test_tool_guardrail_agent_integration.py
+        ├── test_tool_name_validator.py
+        └── test_weather_chat_contextual_followup.py
 ```
 
+---
 
-## 24. Observability Coverage
+## 12. Local Development
 
+### Prerequisites
 
-**Implemented and validated through Phase 11:**
-
-HTTP request count: COMPLETE
-
-HTTP latency: COMPLETE
-
-HTTP errors: COMPLETE
-
-ADK executions: COMPLETE
-
-ADK latency: COMPLETE
-
-Tool calls: COMPLETE
-
-Tool latency: COMPLETE
-
-Tool failures: COMPLETE
-
-External weather API request count: COMPLETE
-
-External weather API latency: COMPLETE
-
-External weather API failures: COMPLETE
-
-Input guardrail blocks: COMPLETE
-
-Output guardrail blocks: COMPLETE
-
-Tool guardrail blocks: COMPLETE
-
-HITL requests: COMPLETE
-
-HITL outcomes: COMPLETE
-
-Pod CPU: COMPLETE
-
-Pod memory: COMPLETE
-
-Pod restarts: COMPLETE
-
-Replica count: COMPLETE
-
-FastAPI tracing: COMPLETE
-
-ADK tracing: COMPLETE
-
-Tool spans: COMPLETE
-
-Weather API spans: COMPLETE
-
-OpenTelemetry Collector: COMPLETE
-
-Trace/log correlation: COMPLETE
-
-
-## 25. Optional Future Observability
-
-
-Two advanced metrics were intentionally not treated as required for the
-**Phase 11 completion point:**
-
--   isolated Gemini-specific call/latency metrics
--   explicit Gemini token-usage metrics
-
-ADK execution metrics currently provide aggregate agent-level
-visibility.
-
-Future work can extract model-level telemetry from the Gemini/ADK
-execution layer where usage metadata is available.
-
-
-## 26. Security Principles
-
-
-**The project follows several useful production-oriented principles:**
-
-
-## 1. Validate User Input Before Model Execution.
-
-
-
-## 2. Validate Model Output Before Returning It.
-
-
-
-## 3. Validate Tool Names Before Tool Arguments.
-
-
-
-## 4. Use Deterministic Security Policies Where Possible.
-
-
-
-## 5. Keep Human Approval Available For Sensitive Tool Operations.
-
-
-
-## 6. Never Expose Secrets Through Metrics.
-
-
-
-## 7. Avoid High-Cardinality Metric Labels.
-
-
-
-## 8. Do Not Use Session Ids As Prometheus Labels.
-
-
-
-## 9. Do Not Use Raw Prompts As Prometheus Labels.
-
-
-
-## 10. Do Not Use Tool Arguments As Prometheus Labels.
-
-
-
-## 11. Keep Api Credentials Outside Source Control.
-
-
-
-## 12. Keep Tls Certificate Verification Enabled.
-
-
-
-## 13. Design Principles
-
-
+Recommended environment:
 
 ```text
-Separation of concerns:
+Python 3.13
+Docker
+kubectl
+Minikube
 ```
 
-API layer: HTTP transport
+Create a virtual environment:
 
-WeatherChatService: conversational application orchestration
+```bash
+python3 -m venv .venv
+```
 
-Google ADK: agent execution
+Activate it on macOS/Linux:
 
-Weather services: weather-domain operations
+```bash
+source .venv/bin/activate
+```
 
-Guardrails: deterministic security boundaries
+Install backend dependencies:
 
-ApprovalService: HITL workflow
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-Observability: metrics, traces, and logging
+The current Streamlit UI also requires Streamlit and Pandas. If they are not already present in the environment:
 
-Kubernetes: runtime orchestration
+```bash
+pip install streamlit pandas
+```
 
-Prometheus/Grafana: monitoring and visualization
+> Note: these UI dependencies should be added to the project's dependency manifest before distributing the Streamlit frontend as part of a clean installation.
 
-This separation makes individual components easier to test and replace.
+---
 
+## 13. Environment Configuration
 
-## 28. Troubleshooting
+Create a local `.env` file.
 
-
-Problem: Metrics API not available
-
-**Check:**
-
+Example:
 
 ```text
-kubectl get pods -n kube-system | grep metrics-server
+GOOGLE_API_KEY=your_google_api_key_here
 ```
 
-Wait for Metrics Server to become ready before retrying kubectl top.
+Do not commit real API keys.
 
-Problem: Helm says release name is already in use
+The repository's `.env.example` should contain placeholders only.
 
-**Example:**
-
+Recommended:
 
 ```text
-cannot reuse a name that is still in use
+GOOGLE_API_KEY=your_google_api_key_here
 ```
 
-**Check existing releases:**
+---
 
+## 14. Start FastAPI Locally
+
+From the parent directory containing the `weather_intelligence_agent_v2` package:
+
+```bash
+PYTHONPATH=/path/to/GenAI_Projects \
+uvicorn weather_intelligence_agent_v2.api.app:app \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --reload
+```
+
+Verify:
+
+```bash
+curl http://localhost:8080/health
+```
+
+---
+
+## 15. Start Streamlit
+
+The Streamlit frontend uses the FastAPI backend.
+
+Example:
+
+```bash
+PYTHONPATH=/path/to/GenAI_Projects \
+WEATHER_API_BASE_URL=http://localhost:8080 \
+python -m streamlit run \
+weather_intelligence_agent_v2/ui/streamlit_app.py \
+--server.port 8501
+```
+
+Open:
 
 ```text
-helm list -A
+http://localhost:8501
 ```
 
-Do not reinstall an already installed monitoring release unnecessarily.
-
-Problem: Kubernetes Secret reports illegal base64 data
-
-Ensure values under Secret.data are correctly base64 encoded, or use an
-appropriate string-based Secret definition when intentionally supported
-by the manifest design.
-
-Problem: /weather/chat returns Internal Server Error
-
-Check: - Uvicorn logs - environment loading - GOOGLE_API_KEY
-availability - weather API connectivity - Gemini/ADK errors
-
-Problem: Weather response says connection error
-
-Check Open-Meteo connectivity and local SSL certificate trust.
-
-Problem: Prometheus query containing labels fails to parse
-
-**Use:**
-
+The application provides centrally accessible views for:
 
 ```text
-curl -sG URL \
-  --data-urlencode 'query=<PromQL>'
+📊 Weather Dashboard
+💬 AI Assistant
 ```
 
-instead of manually constructing an incorrectly encoded query string.
+---
 
-Problem: Metrics do not appear after code changes
+## 16. Docker
 
-Restart the FastAPI/Uvicorn process so the new instrumentation is
-loaded.
+The backend is containerized using Python 3.13.
 
-Remember that Prometheus client metrics are process-local. Traffic
-generated in a separate short-lived Python process does not increment
-the counters of the running Uvicorn process.
+Build:
 
-Problem: Grafana password appears to have an extra % character
+```bash
+docker build \
+  -t weather-intelligence-agent:latest .
+```
 
-The % shown immediately after decoded output on some shells is the
-prompt indicator. It is not part of the decoded password.
+Run:
 
+```bash
+docker run -d \
+  --name weather-intelligence-agent \
+  -p 8081:8080 \
+  --env-file .env \
+  weather-intelligence-agent:latest
+```
 
-## 29. Interview-Ready Project Explanation
+Verify:
 
+```bash
+curl http://localhost:8081/health
+```
 
-**A concise explanation:**
+Check containers:
 
-“I built a production-style Agentic AI Weather Intelligence application
-using Google ADK and Gemini. FastAPI exposes the conversational API,
-while a dedicated WeatherChatService encapsulates ADK execution and
-session management.
+```bash
+docker ps
+```
 
-The agent uses asynchronous weather services backed by Open-Meteo for
-geocoding, current weather, forecasts, and multi-city planning. I
-implemented deterministic input, output, and tool guardrails, along with
-a human-in-the-loop approval workflow for controlled tool execution.
+---
 
-For observability, I instrumented the HTTP, ADK, tool, and external API
-layers with Prometheus metrics and OpenTelemetry traces. Prometheus and
-Grafana provide request, error, latency, tool, weather API, security,
-HITL, CPU, memory, restart, and replica dashboards.
+## 17. Kubernetes / Minikube
 
-I containerized the application with Docker and deployed it on
-Kubernetes using Minikube, with ConfigMaps, Secrets,
-ServiceMonitor-based Prometheus discovery, and an OpenTelemetry
-Collector. The final regression suite contains 129 passing tests.”
-
-
-## 30. Key Learning Outcomes
-
-
-This project demonstrates hands-on understanding of: - Agentic AI
-architecture - Google ADK - Gemini integration - agent/tool separation -
-asynchronous Python - FastAPI - API/service-layer architecture -
-deterministic AI guardrails - human-in-the-loop workflows - Prometheus
-metrics - Grafana dashboards - OpenTelemetry distributed tracing -
-trace/log correlation - Docker - ARM64 container builds - Kubernetes -
-Minikube - ConfigMaps and Secrets - ServiceMonitor - Kubernetes resource
-monitoring - integration testing - observability-driven debugging
-
-
-## 31. Current Release Boundary
-
-
-The current documented release ends after Phase 11.
-
-Phase 12 production hardening was intentionally deferred.
-
-Potential future Phase 12 topics include: - deployment/YAML consistency
-audit - namespace isolation - non-root containers - Kubernetes
-SecurityContext - pod security hardening - graceful shutdown - explicit
-rolling-update strategy - PodDisruptionBudget - Horizontal Pod
-Autoscaling - secret-management improvements - NetworkPolicy -
-deployment automation - production cloud deployment - CI/CD hardening -
-final GitHub packaging
-
-
-## 32. Final Validation
-
-
-**Final validated state through Phase 11:**
-
+Kubernetes manifests are stored under:
 
 ```text
-Automated tests:
-    129 passed
-
-FastAPI:
-    PASS
-
-Google ADK:
-    PASS
-
-Weather API:
-    PASS
-
-Input/output/tool guardrails:
-    PASS
-
-HITL:
-    PASS
-
-Docker:
-    PASS
-
-Kubernetes / Minikube:
-    PASS
-
-Prometheus:
-    PASS
-
-Grafana:
-    PASS
-
-OpenTelemetry:
-    PASS
-
-Trace/log correlation:
-    PASS
+k8s/
 ```
 
-PROJECT
+Start Minikube if required:
 
-Weather Intelligence Agent v2
+```bash
+minikube start
+```
 
-Release: Phase 11 Complete
+Load the locally built image:
 
-Phase 12: Deferred
+```bash
+minikube image load \
+  weather-intelligence-agent:latest
+```
 
-Purpose: Learning, portfolio demonstration, architecture practice, and
-production-style Agentic AI engineering.
+Apply Kubernetes resources as appropriate for the environment.
+
+Example:
+
+```bash
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+```
+
+Restart after rebuilding a local image:
+
+```bash
+kubectl rollout restart \
+  deployment/weather-intelligence-agent
+```
+
+Check rollout:
+
+```bash
+kubectl rollout status \
+  deployment/weather-intelligence-agent
+```
+
+Check pods:
+
+```bash
+kubectl get pods
+```
+
+Check services:
+
+```bash
+kubectl get svc
+```
+
+The application service is:
+
+```text
+weather-intelligence-agent-service
+```
+
+Port-forward it:
+
+```bash
+kubectl port-forward \
+  svc/weather-intelligence-agent-service \
+  8083:8080
+```
+
+Verify:
+
+```bash
+curl http://localhost:8083/health
+```
+
+---
+
+## 18. Kubernetes Secrets
+
+Never commit production credentials directly into Kubernetes manifests.
+
+A safe repository pattern is:
+
+```yaml
+apiVersion: v1
+kind: Secret
+
+metadata:
+  name: weather-intelligence-agent-secret
+
+type: Opaque
+
+stringData:
+  GOOGLE_API_KEY: replace-at-deployment-time
+```
+
+For real production environments, prefer a dedicated secrets-management solution.
+
+Also remember:
+
+> Kubernetes base64-encoded Secret values are encoding, not encryption.
+
+---
+
+## 19. Observability Architecture
+
+The application includes observability at multiple layers.
+
+```text
+Weather Intelligence Agent
+        │
+        ├── Structured Logging
+        │
+        ├── Prometheus Metrics
+        │       ├── HTTP
+        │       ├── Agent
+        │       ├── Tools
+        │       ├── Weather APIs
+        │       └── Security / Guardrails
+        │
+        └── OpenTelemetry
+                ├── FastAPI
+                ├── Agent execution
+                ├── Tool execution
+                └── External operations
+```
+
+---
+
+## 20. Prometheus
+
+Prometheus metrics are exposed through:
+
+```text
+/metrics
+```
+
+Example:
+
+```bash
+curl http://localhost:8083/metrics
+```
+
+The project contains metrics for areas such as:
+
+* HTTP requests
+* Agent execution
+* Agent latency
+* Tool execution
+* Weather API activity
+* Guardrail/security activity
+
+A Kubernetes `ServiceMonitor` is provided:
+
+```text
+k8s/servicemonitor.yaml
+```
+
+---
+
+## 21. Prometheus in Kubernetes
+
+Inspect monitoring services:
+
+```bash
+kubectl get svc -n monitoring
+```
+
+Port-forward Prometheus:
+
+```bash
+kubectl port-forward \
+  -n monitoring \
+  svc/monitoring-kube-prometheus-prometheus \
+  9090:9090
+```
+
+Open:
+
+```text
+http://localhost:9090
+```
+
+Basic health query:
+
+```promql
+up
+```
+
+Additional metric names should be selected from the actual `/metrics` output produced by the running application.
+
+---
+
+## 22. Grafana
+
+Inspect monitoring services:
+
+```bash
+kubectl get svc -n monitoring
+```
+
+Port-forward Grafana:
+
+```bash
+kubectl port-forward \
+  -n monitoring \
+  svc/monitoring-grafana \
+  3000:80
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+Grafana can visualize:
+
+* Application health
+* HTTP traffic
+* Agent execution
+* Agent latency
+* Tool activity
+* Weather API behavior
+* Guardrail/security metrics
+
+---
+
+## 23. OpenTelemetry
+
+OpenTelemetry instrumentation is implemented under:
+
+```text
+observability/
+```
+
+Relevant components include:
+
+```text
+tracing.py
+tool_tracing.py
+```
+
+Kubernetes also includes:
+
+```text
+k8s/otel-collector.yaml
+k8s/otel-collector-config.yaml
+```
+
+The observability design allows application execution to be traced across important AI and service boundaries.
+
+Conceptually:
+
+```text
+HTTP Request
+ ↓
+FastAPI Span
+ ↓
+ADK Execution Span
+ ↓
+Tool Span
+ ↓
+Weather API
+```
+
+---
+
+## 24. Logging
+
+The project includes application logging configuration under:
+
+```text
+observability/logging.py
+```
+
+Logging and metrics are deliberately separated:
+
+```text
+Logs
+→ detailed operational events
+
+Metrics
+→ aggregated operational measurements
+
+Traces
+→ request/execution path across components
+```
+
+---
+
+## 25. Testing
+
+Run the complete test suite:
+
+```bash
+pytest -q weather_intelligence_agent_v2/tests
+```
+
+Latest validated result:
+
+```text
+139 passed
+```
+
+The suite covers areas including:
+
+* FastAPI
+* Async weather planning
+* Input guardrails
+* Output guardrails
+* Prompt-injection validation
+* Tool-name validation
+* Tool-argument validation
+* ADK tool callbacks
+* HITL
+* Approval services
+* Approval API routes
+* Contextual conversational follow-ups
+
+---
+
+## 26. Example Questions
+
+### Current Weather
+
+```text
+What is the current weather in Delhi?
+```
+
+### Forecast
+
+```text
+Give me the 7-day forecast for Mumbai.
+```
+
+### Follow-up
+
+```text
+What is the current weather in Delhi?
+
+What about tomorrow?
+```
+
+### Comparison
+
+```text
+Compare the weather in Delhi and London.
+```
+
+### Outdoor Planning
+
+```text
+Is it a good day for outdoor activities in Bengaluru?
+```
+
+---
+
+## 27. Security Principles
+
+The project follows several production-oriented AI security principles:
+
+1. Validate user input before model execution.
+2. Detect prompt-injection attempts.
+3. Restrict unsupported domains.
+4. Validate tool names.
+5. Validate tool arguments.
+6. Validate model output before returning it.
+7. Support human approval for sensitive operations.
+8. Keep credentials outside source control.
+9. Do not expose secrets through metrics or logs.
+10. Avoid raw prompts as Prometheus labels.
+11. Avoid session IDs as high-cardinality metric labels.
+12. Avoid tool arguments as Prometheus labels.
+13. Keep TLS certificate verification enabled.
+14. Use deterministic security controls where possible.
+
+---
+
+## 28. Important Design Decisions
+
+### FastAPI as the application boundary
+
+Streamlit does not call Google ADK or weather providers directly.
+
+This provides:
+
+* Separation of concerns
+* API reuse
+* Easier testing
+* Independent frontend evolution
+* Better production architecture
+
+### Backend-owned conversation context
+
+Conversation context remains authoritative in the backend.
+
+This allows contextual questions such as:
+
+```text
+What about tomorrow?
+```
+
+without forcing the frontend to reconstruct weather intent.
+
+### Presentation-only Streamlit components
+
+The dashboard visualizes structured backend responses.
+
+It does not duplicate:
+
+* Weather calculations
+* Analytics logic
+* Guardrails
+* Agent execution
+
+### Independent guardrail layer
+
+Security and validation are not delegated entirely to the LLM.
+
+Deterministic validators provide predictable controls around the probabilistic AI layer.
+
+### Observability as an application capability
+
+Metrics, tracing, and logging are integrated into the architecture rather than treated only as deployment infrastructure.
+
+---
+
+## 29. Current Limitations
+
+The current implementation remains intentionally weather-focused.
+
+For example, general travel operations such as hotel booking, flight booking, or complete tourism itinerary generation are outside the current weather-agent scope.
+
+Weather-aware travel-planning intent can be expanded further in the guardrail vocabulary in a future iteration.
+
+The Streamlit frontend also introduces UI dependencies such as Streamlit and Pandas that should be explicitly included in the project's dependency strategy for clean installation/deployment.
+
+---
+
+## 30. Future Enhancements
+
+Potential next iterations include:
+
+* Expanded weather-aware travel intent
+* Production cloud deployment
+* GKE deployment
+* Cloud Run deployment where appropriate
+* Managed secrets integration
+* Persistent production conversation storage
+* Distributed trace backend
+* Alerting
+* SLO/SLA dashboards
+* Load testing
+* CI/CD deployment automation
+* Authentication and authorization
+* Rate limiting
+* Caching
+* Cost/token observability
+* LLM evaluation pipeline
+* Advanced weather risk scoring
+* Additional weather providers/fallbacks
+
+---
+
+## 31. Interview-Ready Project Explanation
+
+A concise explanation:
+
+> Weather Intelligence Agent v2 is a production-oriented Agentic AI application I built using Google ADK and Gemini. FastAPI acts as the backend application boundary, while Streamlit provides both a structured weather dashboard and conversational AI interface.
+>
+> The agent can understand natural-language weather requests, maintain multi-turn session context, select weather tools, retrieve external weather data, and generate contextual responses.
+>
+> I added deterministic input, prompt-injection, domain, tool, and output guardrails around the probabilistic LLM layer. The architecture also contains human-in-the-loop approval capabilities for controlled agent actions.
+>
+> From an LLMOps perspective, I instrumented the application with Prometheus metrics, Grafana dashboards, structured logging, and OpenTelemetry tracing. The application is containerized with Docker and deployed locally on Kubernetes using Minikube.
+>
+> The final implementation includes current weather, 7-day forecasting, analytics, rain probability, AI weather intelligence, conversational follow-ups, Docker/Kubernetes deployment, and observability. The automated regression suite currently passes 139 tests.
+
+---
+
+## 32. Production Engineering Concepts Demonstrated
+
+This project demonstrates practical experience with:
+
+```text
+Agentic AI
+Google ADK
+Gemini
+Tool Calling
+Multi-turn Conversations
+Session Management
+FastAPI
+Async Python
+REST APIs
+Guardrails
+Prompt Injection Protection
+Tool Security
+Output Validation
+Human-in-the-Loop
+Streamlit
+Weather Analytics
+Docker
+Kubernetes
+Prometheus
+Grafana
+OpenTelemetry
+Structured Logging
+Automated Testing
+LLMOps
+Production AI Architecture
+```
+
+---
+
+## 33. Final Validation Status
+
+```text
+Google ADK                  ✅
+Gemini Integration          ✅
+Weather Tools               ✅
+FastAPI                     ✅
+Async Weather Services      ✅
+Input Guardrails            ✅
+Prompt Injection Protection ✅
+Tool Guardrails             ✅
+Output Guardrails           ✅
+HITL                        ✅
+Contextual Follow-ups       ✅
+Streamlit AI Assistant      ✅
+Weather Dashboard           ✅
+7-Day Forecast              ✅
+Weather Analytics           ✅
+Docker                      ✅
+Kubernetes / Minikube       ✅
+Prometheus                  ✅
+Grafana                     ✅
+OpenTelemetry               ✅
+Automated Tests             ✅
+```
+
+Latest regression result:
+
+```text
+139 passed
+```
+
+---
+
+## 34. Project Goal
+
+The purpose of Weather Intelligence Agent v2 is not simply to demonstrate an LLM answering weather questions.
+
+It demonstrates how to engineer an **end-to-end Agentic AI system** with:
+
+```text
+LLM
++
+Agent Framework
++
+Tools
++
+External APIs
++
+Conversation Context
++
+Guardrails
++
+Human Oversight
++
+API Layer
++
+User Interface
++
+Containerization
++
+Orchestration
++
+Metrics
++
+Tracing
++
+Logging
++
+Testing
+```
+
+That combination turns a simple AI prototype into a much more production-oriented Generative AI application.

@@ -16,49 +16,131 @@ WEATHER_API_BASE_URL=http://localhost:8082 \
 streamlit run weather_intelligence_agent_v2/ui/streamlit_app.py
 2026-07-26 19:27:58.537 Uvicorn server started on :::8501
 
+Phase 13.1 — Final Architecture Summary
+
+┌───────────────────────────────────────────────┐
+│              Streamlit Frontend               │
+│                                               │
+│   📊 Weather Dashboard   💬 AI Assistant      │
+└──────────────────────┬────────────────────────┘
+                       │ HTTP
+                       ▼
+┌───────────────────────────────────────────────┐
+│                 FastAPI Layer                 │
+│                                               │
+│  /health   /metrics   weather APIs   chat API │
+└──────────────────────┬────────────────────────┘
+                       │
+                       ▼
+┌───────────────────────────────────────────────┐
+│             Application Services              │
+│                                               │
+│  WeatherChatService                           │
+│  AsyncWeatherService                          │
+│  Weather Planning / Analytics Services        │
+└───────────────┬───────────────────────────────┘
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+┌──────────────┐   ┌──────────────────────────┐
+│  Guardrails  │   │       Google ADK         │
+│              │   │                          │
+│ Input        │   │ Root Weather Agent       │
+│ Injection    │   │ Session Management       │
+│ Domain       │   │ Multi-turn Context       │
+│ Output       │   │ Tool Orchestration       │
+└──────────────┘   └─────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │      Gemini LLM         │
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │     Weather Tools       │
+                    │                         │
+                    │ Current Weather         │
+                    │ 7-Day Forecast          │
+                    │ Weather Analytics       │
+                    │ Planning Intelligence   │
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │       Open-Meteo        │
+                    │   External Weather API  │
+                    └─────────────────────────┘
+
+Production/LLMops Layer:
+
+Application
+     │
+     ├── OpenTelemetry
+     │       └── traces / instrumentation
+     │
+     ├── Prometheus
+     │       ├── HTTP metrics
+     │       ├── ADK execution count
+     │       ├── ADK execution latency
+     │       └── Guardrail metrics
+     │
+     └── Grafana
+             └── operational dashboards
+
+Deployment:
 
 
-                    Weather Intelligence Agent v2
+Source Code
+    ↓
+Docker Image
+    ↓
+Kubernetes / Minikube
+    ↓
+Service
+    ↓
+Prometheus ServiceMonitor
+    ↓
+Grafana
 
-                         FastAPI Application
-                         api/app.py
-                              |
-             +----------------+----------------+
-             |                |                |
-         /health          /metrics         API Routers
-                                              |
-                         +--------------------+------------------+
-                         |                                       |
-                  /weather/*                              HITL approval APIs
-                         |
-             +-----------+------------+
-             |                        |
-       /weather/plan              /weather/chat
-             |                        |
- AsyncWeatherPlanningService     WeatherChatService
-                                      |
-                       +--------------+--------------+
-                       |                             |
-                 InputGuardrail              ADK Runtime
-                                                    |
-                                              ADK Runner
-                                                    |
-                                               root_agent
-                                                    |
-                                                 Gemini
-                                                    |
-                                      before_tool_callback
-                                                    |
-                                  ToolGuardrail → HITLGuardrail
-                                                    |
-                                               ADK Tools
-                                                    |
-                                      Weather/service layers
-                                                    |
-                                               Open-Meteo
-                                                    |
-                                           Agent final response
-                                                    |
-                                            OutputGuardrail
-                                                    |
-                                                 Client
+
+Major capabilities completed
+
+Agentic AI
+
+Google ADK agent orchestration
+Gemini integration
+Tool calling
+Stateful multi-turn conversations
+Contextual follow-ups such as What about tomorrow?
+
+Weather intelligence
+
+Current conditions
+7-day forecast
+Temperature trend visualization
+Daily forecast
+Rain probability
+Weather analytics
+AI-generated planning recommendations
+Multi-city conversational comparisons
+
+Enterprise safeguards
+
+Input validation
+Prompt-injection protection
+Domain guardrails
+Output validation
+Safe fallback responses
+
+Production engineering
+
+FastAPI service layer
+Async weather services
+Docker
+Kubernetes
+Prometheus
+Grafana
+OpenTelemetry
+Structured logging
+Automated tests

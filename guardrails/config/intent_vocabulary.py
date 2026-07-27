@@ -10,6 +10,7 @@ domain to evolve without modifying validation logic.
 
 from __future__ import annotations
 
+
 # ------------------------------------------------------------------
 # Core weather terminology
 # ------------------------------------------------------------------
@@ -49,6 +50,7 @@ WEATHER_TERMS = {
     "feels like",
 }
 
+
 # ------------------------------------------------------------------
 # Weather-dependent activities
 # ------------------------------------------------------------------
@@ -86,6 +88,7 @@ WEATHER_ACTIONS = {
     "outside",
 }
 
+
 # ------------------------------------------------------------------
 # Time expressions
 # ------------------------------------------------------------------
@@ -109,8 +112,9 @@ TIME_TERMS = {
     "sunday",
 }
 
+
 # ------------------------------------------------------------------
-# Weather question patterns
+# Weather / planning question patterns
 # ------------------------------------------------------------------
 
 QUESTION_PATTERNS = {
@@ -123,4 +127,7 @@ QUESTION_PATTERNS = {
     "do i need",
     "what is",
     "what's",
+    "which day",
+    "what day",
+    "best day",
 }

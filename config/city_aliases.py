@@ -26,6 +26,9 @@ CITY_ALIASES = {
 
     "pune": "Pune",
 
+    "jaipur": "Jaipur",
+    "manali": "Manali",
+
     # USA
     "nyc": "New York",
     "new york city": "New York",
@@ -43,5 +46,5 @@ CITY_ALIASES = {
     "dxb": "Dubai",
 
     # Japan
-    "tokyo": "Tokyo"
+    "tokyo": "Tokyo",
 }
