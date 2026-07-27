@@ -1,28 +1,22 @@
 """
-Production conversational weather chat UI.
+Conversational weather assistant UI.
 
-This module manages the Streamlit presentation layer for the
-Weather Intelligence conversational assistant.
+This module is presentation-only.
 
-Responsibilities:
+It renders:
 
-- Display conversation history
-- Provide suggested starter prompts
-- Accept user chat input
-- Send messages through WeatherApiClient
-- Display assistant responses
-- Handle frontend API errors safely
+- assistant landing state
+- example prompts
+- conversation history
+- chat input
+- loading feedback
+- API errors
 
-This module does not:
-
-- Execute Google ADK agents directly
-- Manage backend ADK sessions
-- Call weather services directly
-- Perform weather analytics or intelligence
-
-Agent execution and conversational context are managed by the
-FastAPI backend.
+All weather and Agentic AI functionality remains in the FastAPI
+backend.
 """
+
+from __future__ import annotations
 
 from typing import Optional
 
@@ -37,24 +31,107 @@ from weather_intelligence_agent_v2.ui.api_client import (
 )
 
 
-STARTER_PROMPTS = [
-    "What's the current weather in Delhi?",
-    "Give me the 7-day forecast for Mumbai.",
-    "Which day is best for outdoor activities in London?",
-    "Analyze the weather risks in Dubai this week.",
-]
+STARTER_PROMPTS: tuple[
+    tuple[str, str],
+    ...,
+] = (
+    (
+        "🌤️ Current Weather",
+        "What is the current weather in Delhi?",
+    ),
+    (
+        "📅 7-Day Forecast",
+        "Give me the 7-day forecast for Mumbai.",
+    ),
+    (
+        "🌍 Compare Cities",
+        "Compare the weather in Delhi and London.",
+    ),
+    (
+        "🚶 Outdoor Planning",
+        (
+            "Is it a good day for outdoor "
+            "activities in Bengaluru?"
+        ),
+    ),
+)
+
+
+def render_welcome() -> None:
+    """
+    Render the assistant landing content.
+
+    The application title is deliberately not repeated here.
+    """
+
+    if st.session_state.chat_messages:
+        return
+
+    st.markdown(
+        "### 👋 How can I help with the weather?"
+    )
+
+    st.caption(
+        (
+            "Ask about current conditions, forecasts, "
+            "city comparisons, risks, or outdoor plans."
+        )
+    )
+
+
+def render_starter_prompts() -> Optional[str]:
+    """
+    Render four compact example-question buttons.
+
+    Returns:
+        Selected starter prompt or None.
+    """
+
+    if st.session_state.chat_messages:
+        return None
+
+    st.write("")
+
+    columns = st.columns(
+        2,
+        gap="small",
+    )
+
+    selected_prompt: Optional[str] = None
+
+    for index, (
+        label,
+        prompt,
+    ) in enumerate(
+        STARTER_PROMPTS
+    ):
+
+        with columns[
+            index % 2
+        ]:
+
+            if st.button(
+                label,
+                key=(
+                    f"starter_prompt_{index}"
+                ),
+                help=prompt,
+                use_container_width=True,
+            ):
+
+                selected_prompt = prompt
+
+    return selected_prompt
 
 
 def render_chat_history() -> None:
     """
-    Render conversation messages stored in Streamlit session state.
-
-    Streamlit session state contains presentation history only.
-    Authoritative conversational context is maintained by the
-    backend ADK session.
+    Render visible conversation messages.
     """
 
-    for message in st.session_state.chat_messages:
+    for message in (
+        st.session_state.chat_messages
+    ):
 
         role = message.get(
             "role",
@@ -66,71 +143,39 @@ def render_chat_history() -> None:
             "",
         )
 
-        with st.chat_message(role):
-            st.markdown(content)
+        avatar = (
+            "👤"
+            if role == "user"
+            else "🌦️"
+        )
 
+        with st.chat_message(
+            role,
+            avatar=avatar,
+        ):
 
-def render_starter_prompts() -> Optional[str]:
-    """
-    Render suggested starter prompts.
-
-    Starter prompts are displayed only when the conversation
-    contains no messages.
-
-    Returns:
-        Selected starter prompt, or None when no prompt
-        was selected.
-    """
-
-    if st.session_state.chat_messages:
-        return None
-
-    st.markdown(
-        "**Try asking:**"
-    )
-
-    columns = st.columns(2)
-
-    selected_prompt = None
-
-    for index, prompt in enumerate(
-        STARTER_PROMPTS
-    ):
-        column = columns[
-            index % 2
-        ]
-
-        with column:
-            if st.button(
-                prompt,
-                key=f"starter_prompt_{index}",
-                use_container_width=True,
-            ):
-                selected_prompt = prompt
-
-    return selected_prompt
+            st.markdown(
+                content
+            )
 
 
 def render_chat_error(
     error: WeatherApiError,
 ) -> None:
     """
-    Render a user-friendly conversational API error.
-
-    Args:
-        error:
-            Error raised by WeatherApiClient.
+    Render user-friendly chat errors.
     """
 
     if isinstance(
         error,
         WeatherApiConnectionError,
     ):
+
         st.error(
-            "The Weather Intelligence backend "
-            "is currently unavailable. "
-            "Please try again when the service "
-            "is available."
+            (
+                "Unable to connect to the "
+                "Weather Intelligence backend."
+            )
         )
 
         return
@@ -139,9 +184,12 @@ def render_chat_error(
         error,
         WeatherApiTimeoutError,
     ):
+
         st.error(
-            "The weather assistant took too long "
-            "to respond. Please try your question again."
+            (
+                "The weather assistant took too long "
+                "to respond. Please try again."
+            )
         )
 
         return
@@ -150,17 +198,30 @@ def render_chat_error(
         error,
         WeatherApiResponseError,
     ):
-        st.error(
-            f"The weather assistant returned an error "
-            f"({error.status_code}): "
-            f"{error.message}"
-        )
+
+        if error.status_code == 400:
+
+            st.warning(
+                error.message
+            )
+
+        else:
+
+            st.error(
+                (
+                    f"Backend error "
+                    f"({error.status_code}): "
+                    f"{error.message}"
+                )
+            )
 
         return
 
     st.error(
-        "Unable to process your weather question. "
-        f"{error}"
+        (
+            "Unable to process your request. "
+            f"{error}"
+        )
     )
 
 
@@ -169,20 +230,14 @@ def process_chat_message(
     user_message: str,
 ) -> None:
     """
-    Process a conversational weather request.
-
-    The user message is added to UI history before the API call.
-
-    The assistant response is added only after a successful
-    backend response. This prevents failed backend requests from
-    creating fake assistant messages in conversation history.
+    Send one user message to the FastAPI chat endpoint.
 
     Args:
         api_client:
-            Client used to communicate with FastAPI.
+            Weather Intelligence API client.
 
         user_message:
-            User message to send to the weather agent.
+            User question.
     """
 
     normalized_message = (
@@ -200,8 +255,10 @@ def process_chat_message(
     )
 
     with st.chat_message(
-        "user"
+        "user",
+        avatar="👤",
     ):
+
         st.markdown(
             normalized_message
         )
@@ -209,11 +266,12 @@ def process_chat_message(
     try:
 
         with st.chat_message(
-            "assistant"
+            "assistant",
+            avatar="🌦️",
         ):
 
             with st.spinner(
-                "Analyzing your weather request..."
+                "Thinking..."
             ):
 
                 response = api_client.chat(
@@ -221,7 +279,9 @@ def process_chat_message(
                         st.session_state
                         .chat_session_id
                     ),
-                    message=normalized_message,
+                    message=(
+                        normalized_message
+                    ),
                 )
 
             assistant_response = (
@@ -231,10 +291,10 @@ def process_chat_message(
             )
 
             if not assistant_response:
+
                 assistant_response = (
-                    "I was unable to generate a "
-                    "weather response. "
-                    "Please try again."
+                    "I couldn't generate a weather "
+                    "response. Please try again."
                 )
 
             st.markdown(
@@ -244,15 +304,19 @@ def process_chat_message(
         st.session_state.chat_messages.append(
             {
                 "role": "assistant",
-                "content": assistant_response,
+                "content": (
+                    assistant_response
+                ),
             }
         )
 
     except WeatherApiError as exc:
 
         with st.chat_message(
-            "assistant"
+            "assistant",
+            avatar="🌦️",
         ):
+
             render_chat_error(
                 exc
             )
@@ -262,31 +326,31 @@ def render_weather_chat(
     api_client: WeatherApiClient,
 ) -> None:
     """
-    Render the production conversational weather assistant.
+    Render the complete conversational UI.
+
+    No duplicate application or assistant title is rendered here.
 
     Args:
         api_client:
-            Client used to communicate with FastAPI.
+            Weather Intelligence API client.
     """
 
-    st.subheader(
-        "💬 Weather Intelligence Assistant"
-    )
-
-    st.caption(
-        "Ask follow-up questions about current weather, "
-        "forecasts, analytics, planning, and "
-        "weather intelligence."
-    )
-
-    render_chat_history()
+    render_welcome()
 
     selected_prompt = (
         render_starter_prompts()
     )
 
+    if not st.session_state.chat_messages:
+
+        st.write("")
+
+        st.divider()
+
+    render_chat_history()
+
     user_message = st.chat_input(
-        "Ask a weather question..."
+        "Ask about the weather..."
     )
 
     message_to_process = (
@@ -295,7 +359,10 @@ def render_weather_chat(
     )
 
     if message_to_process:
+
         process_chat_message(
             api_client=api_client,
-            user_message=message_to_process,
+            user_message=(
+                message_to_process
+            ),
         )

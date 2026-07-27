@@ -1,17 +1,20 @@
 """
-Reusable dashboard components for weather intelligence presentation.
+Incremental Streamlit Weather Dashboard.
 
-This module contains Streamlit presentation logic only.
+This version renders:
 
-It must not:
+1. Current Weather
+2. 7-Day Temperature Forecast
+3. Daily Forecast table
+4. Rain Probability chart
+5. Weather Analytics
+6. AI Weather Intelligence
 
-- instantiate backend application services
-- call Open-Meteo directly
-- perform domain analytics
-- perform weather intelligence calculations
-
-All business data must arrive through the FastAPI API contract.
+The dashboard remains presentation-only and uses data returned by
+the existing FastAPI backend.
 """
+
+from __future__ import annotations
 
 from typing import Any
 
@@ -19,42 +22,28 @@ import pandas as pd
 import streamlit as st
 
 
-def _format_value(
-    value: Any,
-    suffix: str = "",
-) -> str:
-    """
-    Format an API value for dashboard presentation.
-
-    Args:
-        value:
-            Value returned by the API.
-
-        suffix:
-            Optional display suffix.
-
-    Returns:
-        Human-readable display value.
-    """
-
-    if value is None:
-        return "N/A"
-
-    return f"{value}{suffix}"
-
-
 def render_current_weather(
     current_weather: dict[str, Any],
 ) -> None:
     """
-    Render current weather as dashboard metric cards.
+    Render current weather returned by the FastAPI backend.
 
     Args:
         current_weather:
-            Current weather section returned by FastAPI.
+            Current weather section from the weather-plan response.
     """
 
-    st.subheader("🌤️ Current Weather")
+    st.subheader(
+        "🌤️ Current Weather"
+    )
+
+    if not current_weather:
+
+        st.info(
+            "Current weather data is not available."
+        )
+
+        return
 
     city = current_weather.get(
         "city",
@@ -66,66 +55,111 @@ def render_current_weather(
         "",
     )
 
-    if country:
-        st.caption(
-            f"{city}, {country}"
-        )
-    else:
-        st.caption(city)
+    location = (
+        f"{city}, {country}"
+        if country
+        else city
+    )
 
-    columns = st.columns(4)
+    st.caption(
+        location
+    )
+
+    temperature = current_weather.get(
+        "temperature"
+    )
+
+    condition = current_weather.get(
+        "condition",
+        "N/A",
+    )
+
+    wind_speed = current_weather.get(
+        "wind_speed"
+    )
+
+    wind_direction = current_weather.get(
+        "wind_direction"
+    )
+
+    columns = st.columns(
+        4
+    )
 
     columns[0].metric(
-        label="Temperature",
-        value=_format_value(
-            current_weather.get("temperature"),
-            " °C",
+        "Temperature",
+        (
+            f"{temperature} °C"
+            if temperature is not None
+            else "N/A"
         ),
     )
 
     columns[1].metric(
-        label="Condition",
-        value=_format_value(
-            current_weather.get("condition")
-        ),
+        "Condition",
+        str(condition),
     )
 
     columns[2].metric(
-        label="Wind Speed",
-        value=_format_value(
-            current_weather.get("wind_speed"),
-            " km/h",
+        "Wind Speed",
+        (
+            f"{wind_speed} m/s"
+            if wind_speed is not None
+            else "N/A"
         ),
     )
 
     columns[3].metric(
-        label="Weather Code",
-        value=_format_value(
-            current_weather.get("weather_code")
+        "Wind Direction",
+        (
+            f"{wind_direction}°"
+            if wind_direction is not None
+            else "N/A"
         ),
     )
 
+    observation_time = current_weather.get(
+        "observation_time"
+    )
 
-def _build_forecast_dataframe(
+    if observation_time:
+
+        st.caption(
+            f"Observed at: {observation_time}"
+        )
+
+
+def build_forecast_dataframe(
     forecast: dict[str, Any],
 ) -> pd.DataFrame:
     """
-    Convert forecast API data into a DataFrame.
+    Convert backend forecast days into a DataFrame.
+
+    Expected backend structure:
+
+    forecast:
+        forecast_days:
+            - date
+            - max_temperature
+            - min_temperature
+            - condition
+            - rain_probability
 
     Args:
         forecast:
             Forecast section returned by FastAPI.
 
     Returns:
-        Forecast DataFrame suitable for visualization.
+        Forecast DataFrame.
     """
 
     forecast_days = forecast.get(
-        "days",
+        "forecast_days",
         [],
     )
 
     if not forecast_days:
+
         return pd.DataFrame()
 
     dataframe = pd.DataFrame(
@@ -133,6 +167,7 @@ def _build_forecast_dataframe(
     )
 
     if "date" in dataframe.columns:
+
         dataframe["date"] = pd.to_datetime(
             dataframe["date"],
             errors="coerce",
@@ -141,11 +176,11 @@ def _build_forecast_dataframe(
     return dataframe
 
 
-def render_forecast_chart(
+def render_temperature_forecast(
     forecast: dict[str, Any],
 ) -> None:
     """
-    Render the seven-day temperature forecast chart.
+    Render seven-day maximum/minimum temperature forecast.
 
     Args:
         forecast:
@@ -156,50 +191,69 @@ def render_forecast_chart(
         "📈 7-Day Temperature Forecast"
     )
 
-    dataframe = _build_forecast_dataframe(
+    dataframe = build_forecast_dataframe(
         forecast
     )
 
     if dataframe.empty:
+
         st.info(
-            "Forecast data is not available."
+            "7-day forecast data is not available."
         )
+
         return
 
-    temperature_columns = [
-        column
-        for column in (
-            "temperature_max",
-            "temperature_min",
-        )
-        if column in dataframe.columns
-    ]
+    required_columns = {
+        "date",
+        "max_temperature",
+        "min_temperature",
+    }
 
-    if (
-        "date" not in dataframe.columns
-        or not temperature_columns
+    if not required_columns.issubset(
+        dataframe.columns
     ):
+
         st.info(
-            "Temperature trend data is not available."
+            "Temperature forecast data is incomplete."
         )
+
         return
 
     chart_dataframe = (
         dataframe[
-            ["date", *temperature_columns]
+            [
+                "date",
+                "max_temperature",
+                "min_temperature",
+            ]
         ]
         .dropna(
-            subset=["date"]
+            subset=[
+                "date"
+            ]
         )
-        .set_index("date")
+        .set_index(
+            "date"
+        )
+        .rename(
+            columns={
+                "max_temperature": (
+                    "Maximum Temperature"
+                ),
+                "min_temperature": (
+                    "Minimum Temperature"
+                ),
+            }
+        )
     )
 
-    chart_dataframe = chart_dataframe.rename(
-        columns={
-            "temperature_max": "Maximum Temperature",
-            "temperature_min": "Minimum Temperature",
-        }
-    )
+    if chart_dataframe.empty:
+
+        st.info(
+            "Temperature forecast data is not available."
+        )
+
+        return
 
     st.line_chart(
         chart_dataframe,
@@ -207,11 +261,11 @@ def render_forecast_chart(
     )
 
 
-def render_forecast_table(
+def render_daily_forecast_table(
     forecast: dict[str, Any],
 ) -> None:
     """
-    Render detailed daily forecast information.
+    Render detailed seven-day forecast data as a table.
 
     Args:
         forecast:
@@ -222,51 +276,170 @@ def render_forecast_table(
         "📅 Daily Forecast"
     )
 
-    dataframe = _build_forecast_dataframe(
+    dataframe = build_forecast_dataframe(
         forecast
     )
 
     if dataframe.empty:
+
         st.info(
-            "Detailed forecast data is not available."
+            "Daily forecast data is not available."
         )
+
         return
 
-    display_dataframe = dataframe.copy()
+    required_columns = [
+        "date",
+        "condition",
+        "max_temperature",
+        "min_temperature",
+        "rain_probability",
+    ]
 
-    if "date" in display_dataframe.columns:
-        display_dataframe["date"] = (
-            display_dataframe["date"]
-            .dt.strftime("%Y-%m-%d")
+    available_columns = [
+        column
+        for column in required_columns
+        if column in dataframe.columns
+    ]
+
+    if not available_columns:
+
+        st.info(
+            "Daily forecast data is incomplete."
         )
 
-    column_labels = {
-        "date": "Date",
-        "temperature_max": "Max Temp (°C)",
-        "temperature_min": "Min Temp (°C)",
-        "precipitation": "Precipitation",
-        "weather_code": "Weather Code",
-        "condition": "Condition",
-    }
+        return
 
-    display_dataframe = (
-        display_dataframe.rename(
-            columns=column_labels
+    table_dataframe = (
+        dataframe[
+            available_columns
+        ].copy()
+    )
+
+    if "date" in table_dataframe.columns:
+
+        table_dataframe["date"] = (
+            table_dataframe["date"]
+            .dt.strftime(
+                "%Y-%m-%d"
+            )
+        )
+
+    table_dataframe = (
+        table_dataframe.rename(
+            columns={
+                "date": "Date",
+                "condition": "Condition",
+                "max_temperature": (
+                    "Max Temp (°C)"
+                ),
+                "min_temperature": (
+                    "Min Temp (°C)"
+                ),
+                "rain_probability": (
+                    "Rain Probability (%)"
+                ),
+            }
         )
     )
 
     st.dataframe(
-        display_dataframe,
+        table_dataframe,
         use_container_width=True,
         hide_index=True,
     )
 
 
-def render_analytics(
+def render_rain_probability(
+    forecast: dict[str, Any],
+) -> None:
+    """
+    Render seven-day rain probability chart.
+
+    Args:
+        forecast:
+            Forecast section returned by FastAPI.
+    """
+
+    st.subheader(
+        "🌧️ Rain Probability"
+    )
+
+    dataframe = build_forecast_dataframe(
+        forecast
+    )
+
+    if dataframe.empty:
+
+        st.info(
+            "Rain probability data is not available."
+        )
+
+        return
+
+    required_columns = {
+        "date",
+        "rain_probability",
+    }
+
+    if not required_columns.issubset(
+        dataframe.columns
+    ):
+
+        st.info(
+            "Rain probability data is incomplete."
+        )
+
+        return
+
+    rain_dataframe = (
+        dataframe[
+            [
+                "date",
+                "rain_probability",
+            ]
+        ]
+        .dropna(
+            subset=[
+                "date"
+            ]
+        )
+        .set_index(
+            "date"
+        )
+        .rename(
+            columns={
+                "rain_probability": (
+                    "Rain Probability (%)"
+                ),
+            }
+        )
+    )
+
+    if rain_dataframe.empty:
+
+        st.info(
+            "Rain probability data is not available."
+        )
+
+        return
+
+    st.bar_chart(
+        rain_dataframe,
+        use_container_width=True,
+    )
+
+
+def render_weather_analytics(
     analytics: dict[str, Any],
 ) -> None:
     """
-    Render weather analytics.
+    Render weather analytics returned by the backend.
+
+    Current backend analytics expose the rainiest day.
+
+    Streamlit intentionally does not calculate additional
+    analytics locally.
 
     Args:
         analytics:
@@ -278,112 +451,101 @@ def render_analytics(
     )
 
     if not analytics:
+
         st.info(
             "Weather analytics are not available."
         )
+
         return
-
-    average_temperature = (
-        analytics.get(
-            "average_temperature"
-        )
-    )
-
-    maximum_temperature = (
-        analytics.get(
-            "maximum_temperature"
-        )
-    )
-
-    minimum_temperature = (
-        analytics.get(
-            "minimum_temperature"
-        )
-    )
-
-    metrics = st.columns(3)
-
-    metrics[0].metric(
-        "Average Temperature",
-        _format_value(
-            average_temperature,
-            " °C",
-        ),
-    )
-
-    metrics[1].metric(
-        "Maximum Temperature",
-        _format_value(
-            maximum_temperature,
-            " °C",
-        ),
-    )
-
-    metrics[2].metric(
-        "Minimum Temperature",
-        _format_value(
-            minimum_temperature,
-            " °C",
-        ),
-    )
 
     rainiest_day = analytics.get(
         "rainiest_day"
     )
 
-    if rainiest_day:
-        st.markdown(
-            "**Rainiest Day**"
+    if not isinstance(
+        rainiest_day,
+        dict,
+    ):
+
+        st.info(
+            "Rainiest-day analytics are not available."
         )
 
-        if isinstance(
-            rainiest_day,
-            dict,
-        ):
-            rain_date = rainiest_day.get(
-                "date",
-                "Unknown",
-            )
+        return
 
-            precipitation = (
-                rainiest_day.get(
-                    "precipitation",
-                    "N/A",
-                )
-            )
-
-            st.write(
-                f"{rain_date} — "
-                f"Precipitation: "
-                f"{precipitation}"
-            )
-
-        else:
-            st.write(
-                str(rainiest_day)
-            )
-
-    temperature_trend = (
-        analytics.get(
-            "temperature_trend"
-        )
+    date = rainiest_day.get(
+        "date",
+        "N/A",
     )
 
-    if temperature_trend:
-        st.markdown(
-            "**Temperature Trend**"
-        )
+    condition = rainiest_day.get(
+        "condition",
+        "N/A",
+    )
 
-        st.write(
-            temperature_trend
-        )
+    rain_probability = rainiest_day.get(
+        "rain_probability"
+    )
+
+    max_temperature = rainiest_day.get(
+        "max_temperature"
+    )
+
+    min_temperature = rainiest_day.get(
+        "min_temperature"
+    )
+
+    first_row = st.columns(
+        3
+    )
+
+    first_row[0].metric(
+        "Rainiest Date",
+        str(date),
+    )
+
+    first_row[1].metric(
+        "Rain Probability",
+        (
+            f"{rain_probability}%"
+            if rain_probability is not None
+            else "N/A"
+        ),
+    )
+
+    first_row[2].metric(
+        "Condition",
+        str(condition),
+    )
+
+    second_row = st.columns(
+        2
+    )
+
+    second_row[0].metric(
+        "Maximum Temperature",
+        (
+            f"{max_temperature} °C"
+            if max_temperature is not None
+            else "N/A"
+        ),
+    )
+
+    second_row[1].metric(
+        "Minimum Temperature",
+        (
+            f"{min_temperature} °C"
+            if min_temperature is not None
+            else "N/A"
+        ),
+    )
 
 
-def render_intelligence(
+def render_ai_weather_intelligence(
     intelligence: dict[str, Any],
 ) -> None:
     """
-    Render AI weather intelligence.
+    Render backend-generated AI Weather Intelligence.
 
     Args:
         intelligence:
@@ -395,9 +557,11 @@ def render_intelligence(
     )
 
     if not intelligence:
+
         st.info(
-            "Weather intelligence is not available."
+            "AI weather intelligence is not available."
         )
+
         return
 
     risk_level = intelligence.get(
@@ -410,6 +574,7 @@ def render_intelligence(
     ).strip().lower()
 
     if normalized_risk == "low":
+
         st.success(
             f"Risk Level: {risk_level}"
         )
@@ -418,40 +583,44 @@ def render_intelligence(
         "medium",
         "moderate",
     }:
+
         st.warning(
             f"Risk Level: {risk_level}"
         )
 
     elif normalized_risk == "high":
+
         st.error(
             f"Risk Level: {risk_level}"
         )
 
     else:
+
         st.info(
             f"Risk Level: {risk_level}"
         )
 
-    recommendations = (
-        intelligence.get(
-            "recommendations",
-            [],
-        )
+    recommendations = intelligence.get(
+        "recommendations",
+        [],
     )
+
+    if not recommendations:
+
+        st.info(
+            "No recommendations are available."
+        )
+
+        return
 
     st.markdown(
-        "**Recommendations**"
+        "#### Recommendations"
     )
 
-    if recommendations:
-        for recommendation in recommendations:
-            st.markdown(
-                f"- {recommendation}"
-            )
+    for recommendation in recommendations:
 
-    else:
-        st.info(
-            "No weather recommendations available."
+        st.markdown(
+            f"- {recommendation}"
         )
 
 
@@ -459,13 +628,29 @@ def render_weather_dashboard(
     weather_plan: dict[str, Any],
 ) -> None:
     """
-    Render the complete production weather dashboard.
+    Render the complete structured weather dashboard.
+
+    Enabled sections:
+
+    - Current Weather
+    - 7-Day Temperature Forecast
+    - Daily Forecast table
+    - Rain Probability chart
+    - Weather Analytics
+    - AI Weather Intelligence
 
     Args:
         weather_plan:
-            Complete weather planning response returned
-            by the FastAPI backend.
+            Complete weather-plan response returned by FastAPI.
     """
+
+    if not weather_plan:
+
+        st.warning(
+            "Weather data is not available."
+        )
+
+        return
 
     current_weather = weather_plan.get(
         "current_weather",
@@ -493,35 +678,30 @@ def render_weather_dashboard(
 
     st.divider()
 
-    render_forecast_chart(
+    render_temperature_forecast(
         forecast
     )
 
     st.divider()
 
-    render_forecast_table(
+    render_daily_forecast_table(
         forecast
     )
 
     st.divider()
 
-    dashboard_columns = st.columns(2)
-
-    with dashboard_columns[0]:
-        render_analytics(
-            analytics
-        )
-
-    with dashboard_columns[1]:
-        render_intelligence(
-            intelligence
-        )
+    render_rain_probability(
+        forecast
+    )
 
     st.divider()
 
-    with st.expander(
-        "🔍 View Complete API Response"
-    ):
-        st.json(
-            weather_plan
-        )
+    render_weather_analytics(
+        analytics
+    )
+
+    st.divider()
+
+    render_ai_weather_intelligence(
+        intelligence
+    )

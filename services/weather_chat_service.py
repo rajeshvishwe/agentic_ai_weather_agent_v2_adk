@@ -82,6 +82,7 @@ class WeatherChatService:
     A single service instance is intended to be application scoped.
 
     Input validation protects the model boundary before execution.
+
     Output validation protects the application boundary after the
     final model response has been generated.
     """
@@ -89,7 +90,9 @@ class WeatherChatService:
     APP_NAME = "weather_intelligence_agent"
     USER_ID = "streamlit_user"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+    ) -> None:
         """
         Initialize the application-scoped ADK runtime and guardrails.
 
@@ -100,7 +103,9 @@ class WeatherChatService:
         require no additional LLM calls.
         """
 
-        self._session_service = InMemorySessionService()
+        self._session_service = (
+            InMemorySessionService()
+        )
 
         self._runner = Runner(
             agent=root_agent,
@@ -109,7 +114,19 @@ class WeatherChatService:
         )
 
         self._guardrail = InputGuardrail()
-        self._output_guardrail = OutputGuardrail()
+
+        self._output_guardrail = (
+            OutputGuardrail()
+        )
+
+        # A session becomes eligible for narrow contextual follow-ups
+        # only after it has successfully completed Google ADK execution.
+        #
+        # This remains instance-local and therefore follows the same
+        # lifecycle as the existing InMemorySessionService.
+        self._established_weather_sessions: set[
+            str
+        ] = set()
 
     async def chat(
         self,
@@ -121,16 +138,18 @@ class WeatherChatService:
 
         Execution flow:
 
-        1. Validate user input.
-        2. Record and reject unsafe or unsupported input.
-        3. Ensure the ADK conversation session exists.
-        4. Record ADK execution count and start timing.
-        5. Execute the Google ADK agent inside an OpenTelemetry span.
-        6. Extract the final natural-language response.
-        7. Record ADK execution latency.
-        8. Validate the generated output.
-        9. Record output guardrail blocks when applicable.
-        10. Return either the validated response or a safe fallback.
+        1. Determine whether this session already has weather context.
+        2. Validate user input.
+        3. Record and reject unsafe or unsupported input.
+        4. Ensure the ADK conversation session exists.
+        5. Record ADK execution count and start timing.
+        6. Execute the Google ADK agent inside an OpenTelemetry span.
+        7. Extract the final natural-language response.
+        8. Mark the session as an established weather conversation.
+        9. Record ADK execution latency.
+        10. Validate the generated output.
+        11. Record output guardrail blocks when applicable.
+        12. Return either the validated response or a safe fallback.
 
         Args:
             session_id:
@@ -147,14 +166,25 @@ class WeatherChatService:
 
         Raises:
             InputValidationError:
-                If Phase 9.2 input validation rejects the user message.
+                If deterministic input validation rejects the user message.
         """
 
-        input_validation = self._guardrail.validate(
-            message
+        allow_contextual_followup = (
+            session_id
+            in self._established_weather_sessions
+        )
+
+        input_validation = (
+            self._guardrail.validate(
+                message,
+                allow_contextual_followup=(
+                    allow_contextual_followup
+                ),
+            )
         )
 
         if not input_validation.is_valid:
+
             INPUT_GUARDRAIL_BLOCKS_TOTAL.inc()
 
             LOGGER.warning(
@@ -186,6 +216,7 @@ class WeatherChatService:
         adk_start_time = perf_counter()
 
         try:
+
             with TRACER.start_as_current_span(
                 "adk.agent.execute"
             ) as span:
@@ -211,11 +242,14 @@ class WeatherChatService:
 
                 event_count = 0
 
-                async for event in self._runner.run_async(
-                    user_id=self.USER_ID,
-                    session_id=session_id,
-                    new_message=user_message,
+                async for event in (
+                    self._runner.run_async(
+                        user_id=self.USER_ID,
+                        session_id=session_id,
+                        new_message=user_message,
+                    )
                 ):
+
                     event_count += 1
 
                     if (
@@ -223,9 +257,11 @@ class WeatherChatService:
                         and event.content
                         and event.content.parts
                     ):
+
                         final_response = "".join(
                             part.text or ""
-                            for part in event.content.parts
+                            for part
+                            in event.content.parts
                             if getattr(
                                 part,
                                 "text",
@@ -240,31 +276,43 @@ class WeatherChatService:
 
                 span.set_attribute(
                     "genai.response.generated",
-                    bool(final_response),
+                    bool(
+                        final_response
+                    ),
                 )
 
                 LOGGER.info(
                     "Google ADK agent execution completed."
                 )
 
+                self._established_weather_sessions.add(
+                    session_id
+                )
+
         finally:
+
             ADK_EXECUTION_DURATION_SECONDS.observe(
                 perf_counter()
                 - adk_start_time
             )
 
-        output_validation = self._output_guardrail.validate(
-            final_response
+        output_validation = (
+            self._output_guardrail.validate(
+                final_response
+            )
         )
 
         if not output_validation.is_valid:
+
             OUTPUT_GUARDRAIL_BLOCKS_TOTAL.inc()
 
             LOGGER.warning(
                 "Output guardrail blocked an agent response."
             )
 
-            return SAFE_OUTPUT_FALLBACK_MESSAGE
+            return (
+                SAFE_OUTPUT_FALLBACK_MESSAGE
+            )
 
         return final_response
 
@@ -275,8 +323,9 @@ class WeatherChatService:
         """
         Ensure an ADK conversation session exists.
 
-        The existing session is reused when available. Otherwise,
-        a new in-memory ADK session is created.
+        The existing session is reused when available.
+
+        Otherwise, a new in-memory ADK session is created.
 
         Args:
             session_id:
@@ -294,8 +343,10 @@ class WeatherChatService:
         if existing_session is not None:
             return
 
-        await self._session_service.create_session(
-            app_name=self.APP_NAME,
-            user_id=self.USER_ID,
-            session_id=session_id,
+        await (
+            self._session_service.create_session(
+                app_name=self.APP_NAME,
+                user_id=self.USER_ID,
+                session_id=session_id,
+            )
         )
