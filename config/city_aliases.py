@@ -1,9 +1,15 @@
 """
-Common city aliases.
+Common location aliases.
+
+This map intentionally contains only abbreviations, alternate spellings,
+and a small number of commonly used canonical names.
+
+Normal world-city discovery is handled dynamically through the Open-Meteo
+geocoding service. The alias map is therefore not intended to become a
+complete list of cities.
 """
 
 CITY_ALIASES = {
-
     # India
     "blr": "Bangalore",
     "b'lore": "Bangalore",
@@ -26,6 +32,7 @@ CITY_ALIASES = {
 
     "pune": "Pune",
 
+    # Existing guardrail additions
     "jaipur": "Jaipur",
     "manali": "Manali",
 
@@ -34,9 +41,7 @@ CITY_ALIASES = {
     "new york city": "New York",
 
     "la": "Los Angeles",
-
     "sf": "San Francisco",
-
     "dc": "Washington",
 
     # UK

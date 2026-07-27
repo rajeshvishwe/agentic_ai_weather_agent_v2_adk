@@ -5,7 +5,8 @@ This module contains configurable vocabularies used by the
 WeatherIntentValidator.
 
 Keeping vocabularies outside the validator allows the weather
-domain to evolve without modifying validation logic.
+planning domain to evolve without mixing vocabulary maintenance
+with validation logic.
 """
 
 from __future__ import annotations
@@ -60,30 +61,42 @@ WEATHER_ACTIONS = {
     "jacket",
     "coat",
     "raincoat",
+
     "trek",
     "trekking",
+
     "hike",
     "hiking",
+
     "camp",
     "camping",
+
     "travel",
     "trip",
+
     "drive",
     "driving",
+
     "cycle",
     "cycling",
     "bike",
+
     "walking",
     "walk",
+
     "run",
     "running",
+
     "picnic",
     "beach",
+
     "fishing",
     "swimming",
     "surfing",
+
     "flight",
     "fly",
+
     "safe",
     "outside",
 }
@@ -97,12 +110,19 @@ TIME_TERMS = {
     "today",
     "tomorrow",
     "tonight",
+
     "this morning",
     "this afternoon",
     "this evening",
+
     "this weekend",
     "weekend",
+
     "next week",
+    "upcoming week",
+    "coming week",
+    "next 7 days",
+
     "monday",
     "tuesday",
     "wednesday",
@@ -114,10 +134,11 @@ TIME_TERMS = {
 
 
 # ------------------------------------------------------------------
-# Weather / planning question patterns
+# Weather / planning / comparison question patterns
 # ------------------------------------------------------------------
 
 QUESTION_PATTERNS = {
+    # Standard questions
     "will it",
     "is it",
     "how is",
@@ -127,7 +148,15 @@ QUESTION_PATTERNS = {
     "do i need",
     "what is",
     "what's",
+
+    # Day-selection planning
     "which day",
     "what day",
     "best day",
+
+    # Weather comparison intent
+    "compare",
+    "comparison",
+    "which is better",
+    "which one is better",
 }
