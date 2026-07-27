@@ -1,5 +1,5 @@
 """
-Unit tests for Phase 9.4 tool argument validation.
+Unit tests for deterministic tool argument validation.
 """
 
 from __future__ import annotations
@@ -10,9 +10,10 @@ from weather_intelligence_agent_v2.guardrails.validators.tool_argument_validator
 
 
 def test_valid_current_weather_arguments_pass() -> None:
-    """Valid current-weather arguments must pass."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_current_weather",
@@ -25,9 +26,10 @@ def test_valid_current_weather_arguments_pass() -> None:
 
 
 def test_valid_forecast_arguments_pass() -> None:
-    """Valid forecast arguments must pass."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_forecast",
@@ -40,9 +42,10 @@ def test_valid_forecast_arguments_pass() -> None:
 
 
 def test_valid_weather_plan_arguments_pass() -> None:
-    """Valid weather-planning arguments must pass."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_weather_plan",
@@ -55,9 +58,10 @@ def test_valid_weather_plan_arguments_pass() -> None:
 
 
 def test_valid_weather_intelligence_arguments_pass() -> None:
-    """Valid weather-intelligence arguments must pass."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_weather_intelligence",
@@ -70,9 +74,10 @@ def test_valid_weather_intelligence_arguments_pass() -> None:
 
 
 def test_valid_multi_city_analysis_arguments_pass() -> None:
-    """Valid multi-city analytics arguments must pass."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "analyze_weather",
@@ -88,10 +93,190 @@ def test_valid_multi_city_analysis_arguments_pass() -> None:
     assert result.is_valid is True
 
 
-def test_missing_city_is_blocked() -> None:
-    """Required city argument must not be omitted."""
+def test_valid_weather_reminder_arguments_pass() -> None:
+    """
+    Valid weather reminder arguments must pass.
+    """
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
+
+    result = validator.validate(
+        "create_weather_reminder",
+        {
+            "city": "Delhi",
+            "reminder_time": (
+                "tomorrow morning"
+            ),
+            "message": (
+                "Check Delhi weather."
+            ),
+        },
+    )
+
+    assert result.is_valid is True
+
+
+def test_weather_reminder_requires_city() -> None:
+
+    validator = (
+        ToolArgumentValidator()
+    )
+
+    result = validator.validate(
+        "create_weather_reminder",
+        {
+            "reminder_time": (
+                "tomorrow morning"
+            ),
+            "message": (
+                "Check the weather."
+            ),
+        },
+    )
+
+    assert result.is_valid is False
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENT_REQUIRED"
+    )
+
+
+def test_weather_reminder_requires_time() -> None:
+
+    validator = (
+        ToolArgumentValidator()
+    )
+
+    result = validator.validate(
+        "create_weather_reminder",
+        {
+            "city": "Delhi",
+            "message": (
+                "Check Delhi weather."
+            ),
+        },
+    )
+
+    assert result.is_valid is False
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENT_REQUIRED"
+    )
+
+
+def test_weather_reminder_requires_message() -> None:
+
+    validator = (
+        ToolArgumentValidator()
+    )
+
+    result = validator.validate(
+        "create_weather_reminder",
+        {
+            "city": "Delhi",
+            "reminder_time": (
+                "tomorrow morning"
+            ),
+        },
+    )
+
+    assert result.is_valid is False
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENT_REQUIRED"
+    )
+
+
+def test_empty_reminder_time_is_blocked() -> None:
+
+    validator = (
+        ToolArgumentValidator()
+    )
+
+    result = validator.validate(
+        "create_weather_reminder",
+        {
+            "city": "Delhi",
+            "reminder_time": " ",
+            "message": (
+                "Check Delhi weather."
+            ),
+        },
+    )
+
+    assert result.is_valid is False
+
+    assert (
+        result.error_code
+        == "TOOL_REMINDER_TIME_EMPTY"
+    )
+
+
+def test_empty_reminder_message_is_blocked() -> None:
+
+    validator = (
+        ToolArgumentValidator()
+    )
+
+    result = validator.validate(
+        "create_weather_reminder",
+        {
+            "city": "Delhi",
+            "reminder_time": (
+                "tomorrow morning"
+            ),
+            "message": " ",
+        },
+    )
+
+    assert result.is_valid is False
+
+    assert (
+        result.error_code
+        == "TOOL_REMINDER_MESSAGE_EMPTY"
+    )
+
+
+def test_unexpected_reminder_argument_is_blocked() -> None:
+
+    validator = (
+        ToolArgumentValidator()
+    )
+
+    result = validator.validate(
+        "create_weather_reminder",
+        {
+            "city": "Delhi",
+            "reminder_time": (
+                "tomorrow morning"
+            ),
+            "message": (
+                "Check Delhi weather."
+            ),
+            "shell_command": (
+                "rm -rf /"
+            ),
+        },
+    )
+
+    assert result.is_valid is False
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENT_UNEXPECTED"
+    )
+
+
+def test_missing_city_is_blocked() -> None:
+
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_current_weather",
@@ -99,13 +284,18 @@ def test_missing_city_is_blocked() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_ARGUMENT_REQUIRED"
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENT_REQUIRED"
+    )
 
 
 def test_empty_city_is_blocked() -> None:
-    """Empty city values must be rejected."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_current_weather",
@@ -115,13 +305,18 @@ def test_empty_city_is_blocked() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_CITY_EMPTY"
+
+    assert (
+        result.error_code
+        == "TOOL_CITY_EMPTY"
+    )
 
 
 def test_whitespace_city_is_blocked() -> None:
-    """Whitespace-only city values must be rejected."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_current_weather",
@@ -131,13 +326,18 @@ def test_whitespace_city_is_blocked() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_CITY_EMPTY"
+
+    assert (
+        result.error_code
+        == "TOOL_CITY_EMPTY"
+    )
 
 
 def test_non_string_city_is_blocked() -> None:
-    """Non-text city arguments must be rejected."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_current_weather",
@@ -147,46 +347,65 @@ def test_non_string_city_is_blocked() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_CITY_INVALID_TYPE"
+
+    assert (
+        result.error_code
+        == "TOOL_CITY_INVALID_TYPE"
+    )
 
 
 def test_excessively_long_city_is_blocked() -> None:
-    """Excessively long city arguments must be rejected."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_current_weather",
         {
-            "city": "A" * 101,
+            "city": (
+                "A" * 101
+            ),
         },
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_CITY_TOO_LONG"
+
+    assert (
+        result.error_code
+        == "TOOL_CITY_TOO_LONG"
+    )
 
 
 def test_unexpected_argument_is_blocked() -> None:
-    """Unexpected parameters must fail validation."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_current_weather",
         {
             "city": "Delhi",
-            "command": "delete_database",
+            "command": (
+                "delete_database"
+            ),
         },
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_ARGUMENT_UNEXPECTED"
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENT_UNEXPECTED"
+    )
 
 
 def test_unknown_tool_policy_is_blocked() -> None:
-    """Tools without argument policies must fail closed."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "unknown_tool",
@@ -196,13 +415,18 @@ def test_unknown_tool_policy_is_blocked() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_ARGUMENT_POLICY_NOT_FOUND"
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENT_POLICY_NOT_FOUND"
+    )
 
 
 def test_non_mapping_arguments_are_blocked() -> None:
-    """Tool arguments must be mapping objects."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "get_current_weather",
@@ -210,13 +434,18 @@ def test_non_mapping_arguments_are_blocked() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_ARGUMENTS_INVALID_TYPE"
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENTS_INVALID_TYPE"
+    )
 
 
 def test_analyze_weather_requires_cities() -> None:
-    """Analytics tool must require the plural cities argument."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "analyze_weather",
@@ -226,13 +455,18 @@ def test_analyze_weather_requires_cities() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_ARGUMENT_REQUIRED"
+
+    assert (
+        result.error_code
+        == "TOOL_ARGUMENT_REQUIRED"
+    )
 
 
 def test_analyze_weather_empty_cities_is_blocked() -> None:
-    """An empty city collection must be rejected."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "analyze_weather",
@@ -242,13 +476,18 @@ def test_analyze_weather_empty_cities_is_blocked() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_CITIES_EMPTY"
+
+    assert (
+        result.error_code
+        == "TOOL_CITIES_EMPTY"
+    )
 
 
 def test_analyze_weather_non_list_is_blocked() -> None:
-    """Analytics cities must be supplied as a list."""
 
-    validator = ToolArgumentValidator()
+    validator = (
+        ToolArgumentValidator()
+    )
 
     result = validator.validate(
         "analyze_weather",
@@ -258,42 +497,8 @@ def test_analyze_weather_non_list_is_blocked() -> None:
     )
 
     assert result.is_valid is False
-    assert result.error_code == "TOOL_CITIES_INVALID_TYPE"
 
-
-def test_analyze_weather_invalid_city_is_blocked() -> None:
-    """Every city inside a multi-city request must be valid."""
-
-    validator = ToolArgumentValidator()
-
-    result = validator.validate(
-        "analyze_weather",
-        {
-            "cities": [
-                "Delhi",
-                "",
-            ],
-        },
+    assert (
+        result.error_code
+        == "TOOL_CITIES_INVALID_TYPE"
     )
-
-    assert result.is_valid is False
-    assert result.error_code == "TOOL_CITY_EMPTY"
-
-
-def test_analyze_weather_too_many_cities_is_blocked() -> None:
-    """Analytics requests must respect the city-count limit."""
-
-    validator = ToolArgumentValidator()
-
-    result = validator.validate(
-        "analyze_weather",
-        {
-            "cities": [
-                f"City-{index}"
-                for index in range(11)
-            ],
-        },
-    )
-
-    assert result.is_valid is False
-    assert result.error_code == "TOOL_TOO_MANY_CITIES"

@@ -2,12 +2,11 @@
 
 --To start server: (in parent directory) in mac-os
 
-source weather_intelligence_agent_v2/.venv/bin/activate
-
+PYTHONPATH=/Users/rajeshvishwe/GenAI_Projects \
 uvicorn weather_intelligence_agent_v2.api.app:app \
-  --host 0.0.0.0 \
-  --port 8082 \
-  --reloapip install -r requirements.txtd
+--host 0.0.0.0 \
+--port 8082 \
+--reload
 
 --To start UI:
 

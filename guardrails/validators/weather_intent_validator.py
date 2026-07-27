@@ -1,22 +1,23 @@
 """
 Deterministic weather-intent validator with hybrid location resolution.
 
-The validator determines whether a request belongs to the weather
-domain without invoking an LLM.
+Location resolution strategy:
 
-Location detection uses a hybrid strategy:
+1. Canonical city names may be recognized directly in normal text.
 
-1. Local aliases/canonical names for short forms such as
-   BLR, DEL and NYC.
+2. Short aliases such as BLR, DEL, NYC, CAN, MAN, etc. are not
+   globally scanned through arbitrary prose because airport codes
+   may overlap with normal English words.
 
-2. Open-Meteo geocoding fallback for normal global
-   city/place names.
+3. Aliases are resolved only after text has been identified as an
+   actual location phrase.
 
-The external geocoding fallback is deliberately attempted only
-after the message already looks like a weather-planning question.
+4. Unknown locations are validated through the injected global
+   geocoding lookup, backed by Open-Meteo in production.
 
-This prevents every unrelated prompt from depending on an
-external API.
+5. If a request contains an apparent location, that location must
+   resolve successfully before generic planning/time vocabulary can
+   allow the request.
 """
 
 from __future__ import annotations
@@ -51,31 +52,12 @@ class WeatherIntentValidator(
     BaseValidator
 ):
     """
-    Validate whether a request belongs to the weather domain.
-
-    The validator combines:
-
-    - explicit weather vocabulary
-    - weather-dependent activities
-    - time references
-    - local city aliases
-    - global geocoding fallback
+    Validate whether user input belongs to the weather domain.
     """
 
-    TOKEN_PATTERN = re.compile(
-        r"[A-Za-z']+"
-    )
-
-    # --------------------------------------------------------------
-    # Natural-language calendar dates
-    #
-    # Examples:
-    #
-    # 2nd August
-    # 2 August
-    # August 2
-    # August 2nd
-    # --------------------------------------------------------------
+    # ==========================================================
+    # DATE EXPRESSIONS
+    # ==========================================================
 
     MONTH_DATE_PATTERN = re.compile(
         r"\b(?:"
@@ -114,16 +96,6 @@ class WeatherIntentValidator(
         re.IGNORECASE,
     )
 
-    # --------------------------------------------------------------
-    # Numeric calendar dates
-    #
-    # Examples:
-    #
-    # 02/08
-    # 02/08/2026
-    # 02-08-2026
-    # --------------------------------------------------------------
-
     NUMERIC_DATE_PATTERN = re.compile(
         r"\b"
         r"\d{1,2}"
@@ -133,60 +105,53 @@ class WeatherIntentValidator(
         r"\b"
     )
 
-    # --------------------------------------------------------------
-    # Candidate location extraction
-    #
-    # Examples:
-    #
-    # in Dehradun tomorrow
-    # to Rio de Janeiro next week
-    # visit Reykjavik
-    # for Manali next week
-    #
-    # Note:
-    #
-    # "to visit Reykjavik"
-    #
-    # initially produces:
-    #
-    # "visit reykjavik"
-    #
-    # The candidate-normalization step below removes the leading
-    # planning/action word.
-    # --------------------------------------------------------------
+    # ==========================================================
+    # LOCATION EXTRACTION
+    # ==========================================================
 
     LOCATION_PHRASE_PATTERN = re.compile(
         r"\b"
-        r"(?:in|to|at|near|visit|visiting|for)"
+        r"(?:"
+        r"visit|"
+        r"visiting|"
+        r"in|"
+        r"to|"
+        r"at|"
+        r"near|"
+        r"for"
+        r")"
         r"\s+"
         r"([a-z][a-z .'-]{1,60}?)"
         r"(?="
         r"\s+(?:"
-        r"today|tomorrow|tonight|"
-        r"this|next|upcoming|coming|"
-        r"on|during|for|in|at|to|"
-        r"trip|visit|travel|trek|tour|"
-        r"holiday|vacation|"
-        r"week|weekend|month|day"
+        r"today|"
+        r"tomorrow|"
+        r"tonight|"
+        r"this|"
+        r"next|"
+        r"upcoming|"
+        r"coming|"
+        r"on|"
+        r"during|"
+        r"week|"
+        r"weekend|"
+        r"month|"
+        r"day|"
+        r"trip|"
+        r"travel|"
+        r"visit|"
+        r"trek|"
+        r"tour|"
+        r"holiday|"
+        r"vacation"
         r")\b"
-        r"|[?.,!]"
-        r"|$"
+        r"|"
+        r"[?.,!]"
+        r"|"
+        r"$"
         r")",
         re.IGNORECASE,
     )
-
-    # Words that may incorrectly become part of a captured
-    # location when a preceding preposition is matched first.
-    #
-    # Example:
-    #
-    # "to visit Reykjavik"
-    #
-    # regex candidate:
-    #     "visit reykjavik"
-    #
-    # normalized candidate:
-    #     "reykjavik"
 
     LOCATION_LEADING_ACTIONS = (
         "visit ",
@@ -200,17 +165,54 @@ class WeatherIntentValidator(
         "trek ",
     )
 
-    # Local canonical cities are cached once.
+    # Sometimes the regex can capture the connector immediately
+    # before the time expression.
+    #
+    # Example:
+    #
+    #     for Testopolis in upcoming week
+    #
+    # raw candidate:
+    #
+    #     testopolis in
+    #
+    # expected candidate:
+    #
+    #     testopolis
+
+    LOCATION_TRAILING_CONNECTORS = (
+        " in",
+        " on",
+        " at",
+        " to",
+        " for",
+        " during",
+        " near",
+    )
+
+    # ==========================================================
+    # LOCATION DICTIONARIES
+    # ==========================================================
+
+    KNOWN_ALIASES = {
+        alias.lower()
+        for alias
+        in CITY_ALIASES.keys()
+    }
 
     KNOWN_CITIES = {
         city.lower()
-        for city in CITY_ALIASES.values()
+        for city
+        in CITY_ALIASES.values()
     }
 
     def __init__(
         self,
         location_lookup: (
-            Callable[[str], bool]
+            Callable[
+                [str],
+                bool,
+            ]
             | None
         ) = None,
     ) -> None:
@@ -219,13 +221,13 @@ class WeatherIntentValidator(
 
         Args:
             location_lookup:
-                Optional global location lookup.
+                Optional location validator.
 
                 Production:
                     Open-Meteo geocoding.
 
                 Tests:
-                    deterministic injected function.
+                    Injected deterministic function.
         """
 
         self._location_lookup = (
@@ -233,37 +235,41 @@ class WeatherIntentValidator(
             or is_valid_city
         )
 
+    # ==========================================================
+    # MAIN VALIDATION
+    # ==========================================================
+
     def validate(
         self,
         message: str,
     ) -> ValidationResult:
         """
-        Validate whether input belongs to the weather domain.
-
-        Args:
-            message:
-                User input.
-
-        Returns:
-            ValidationResult.
+        Validate weather-domain intent.
         """
 
         if message is None:
 
-            return ValidationResult.success()
+            return (
+                ValidationResult.success()
+            )
 
-        text = message.lower()
+        text = (
+            message
+            .strip()
+            .lower()
+        )
 
-        # ----------------------------------------------------------
-        # Rule 1
-        # Explicit weather terminology.
-        # ----------------------------------------------------------
+        contains_weather = (
+            self._contains_weather_terms(
+                text
+            )
+        )
 
-        if self._contains_weather_terms(
-            text
-        ):
-
-            return ValidationResult.success()
+        contains_question = (
+            self._contains_question_pattern(
+                text
+            )
+        )
 
         contains_activity = (
             self._contains_weather_activity(
@@ -277,327 +283,348 @@ class WeatherIntentValidator(
             )
         )
 
-        contains_question = (
-            self._contains_question_pattern(
-                text
-            )
-        )
-
-        # ----------------------------------------------------------
-        # Fast local alias/city lookup.
-        # ----------------------------------------------------------
-
-        contains_local_city = (
-            self._contains_local_city(
-                text
-            )
-        )
-
-        # ----------------------------------------------------------
-        # Rule 2
-        # Weather-dependent activity + time/local city.
-        #
-        # Existing behavior is intentionally preserved.
-        #
-        # Examples:
-        #
-        # trekking tomorrow
-        # travel next week
-        # hiking in Delhi
-        # ----------------------------------------------------------
-
-        if contains_activity:
-
-            if (
-                contains_time
-                or contains_local_city
-            ):
-
-                return ValidationResult.success()
-
-        # ----------------------------------------------------------
-        # Rule 3
-        # Local city + time.
-        # ----------------------------------------------------------
-
-        if (
-            contains_local_city
-            and contains_time
-        ):
-
-            return ValidationResult.success()
-
-        # ----------------------------------------------------------
-        # Rule 4
-        # Question pattern + local city.
-        # ----------------------------------------------------------
-
-        if (
-            contains_question
-            and contains_local_city
-        ):
-
-            return ValidationResult.success()
-
-        # ----------------------------------------------------------
-        # Global-city fallback.
-        #
-        # Open-Meteo is only queried if the sentence already
-        # contains planning/question/time evidence.
-        #
-        # Examples:
-        #
-        # Which day is better to visit Reykjavik?
-        #
-        # Can I plan for Dehradun next week?
-        #
-        # Dehradun trip for 2nd August
-        # ----------------------------------------------------------
-
-        should_try_global_location = any(
+        planning_context = any(
             (
+                contains_weather,
                 contains_question,
                 contains_activity,
                 contains_time,
             )
         )
 
-        if should_try_global_location:
+        # ------------------------------------------------------
+        # Known canonical city in free-form text.
+        # ------------------------------------------------------
 
-            contains_global_city = (
-                self._contains_global_city(
-                    text
-                )
+        contains_known_city = (
+            self._contains_canonical_city(
+                text
             )
-
-            if contains_global_city:
-
-                return ValidationResult.success()
-
-        # ----------------------------------------------------------
-        # Outside supported domain.
-        # ----------------------------------------------------------
-
-        return ValidationResult.failure(
-            error_code=(
-                "OUTSIDE_WEATHER_DOMAIN"
-            ),
-            message=(
-                "This assistant only supports "
-                "weather-related requests."
-            ),
-            validator=(
-                self.__class__.__name__
-            ),
-            category=(
-                "Domain Validation"
-            ),
         )
 
+        if (
+            contains_known_city
+            and planning_context
+        ):
+
+            return (
+                ValidationResult.success()
+            )
+
+        # ------------------------------------------------------
+        # Extract explicit location candidates.
+        # ------------------------------------------------------
+
+        location_candidates = (
+            self._extract_location_candidates(
+                text
+            )
+        )
+
+        if location_candidates:
+
+            if not planning_context:
+
+                return (
+                    self._outside_domain()
+                )
+
+            for candidate in (
+                location_candidates
+            ):
+
+                # ----------------------------------------------
+                # Local alias / canonical resolution
+                # ----------------------------------------------
+
+                if self._is_local_location(
+                    candidate
+                ):
+
+                    return (
+                        ValidationResult.success()
+                    )
+
+                # ----------------------------------------------
+                # Global geocoding fallback
+                # ----------------------------------------------
+
+                try:
+
+                    if self._location_lookup(
+                        candidate
+                    ):
+
+                        return (
+                            ValidationResult.success()
+                        )
+
+                except Exception:
+
+                    # External geocoding must never crash the
+                    # deterministic guardrail pipeline.
+
+                    continue
+
+            # A location was supplied but could not be validated.
+
+            return (
+                self._outside_domain()
+            )
+
+        # ------------------------------------------------------
+        # Explicit weather terminology without location.
+        # ------------------------------------------------------
+
+        if contains_weather:
+
+            return (
+                ValidationResult.success()
+            )
+
+        # ------------------------------------------------------
+        # Location-free weather-sensitive planning.
+        # ------------------------------------------------------
+
+        if (
+            contains_activity
+            and contains_time
+        ):
+
+            return (
+                ValidationResult.success()
+            )
+
+        return (
+            self._outside_domain()
+        )
+
+    # ==========================================================
+    # WEATHER VOCABULARY
+    # ==========================================================
+
+    @staticmethod
     def _contains_weather_terms(
-        self,
         text: str,
     ) -> bool:
         """
         Detect explicit weather terminology.
-
-        Args:
-            text:
-                Lowercase user input.
-
-        Returns:
-            True if weather terminology is present.
         """
 
         return any(
             term in text
-            for term in WEATHER_TERMS
+            for term
+            in WEATHER_TERMS
         )
 
+    @staticmethod
     def _contains_weather_activity(
-        self,
         text: str,
     ) -> bool:
         """
-        Detect weather-dependent activities.
-
-        Args:
-            text:
-                Lowercase user input.
-
-        Returns:
-            True when a weather-sensitive activity is present.
+        Detect weather-sensitive activities.
         """
 
         return any(
-            activity in text
-            for activity in WEATHER_ACTIONS
+            action in text
+            for action
+            in WEATHER_ACTIONS
         )
+
+    @staticmethod
+    def _contains_question_pattern(
+        text: str,
+    ) -> bool:
+        """
+        Detect supported question patterns.
+        """
+
+        return any(
+            pattern in text
+            for pattern
+            in QUESTION_PATTERNS
+        )
+
+    # ==========================================================
+    # TIME RECOGNITION
+    # ==========================================================
 
     def _contains_time_reference(
         self,
         text: str,
     ) -> bool:
         """
-        Detect relative and calendar time expressions.
-
-        Supported examples:
-
-        - tomorrow
-        - next week
-        - upcoming week
-        - 2nd August
-        - August 2
-        - 02/08/2026
-
-        Args:
-            text:
-                Lowercase user input.
-
-        Returns:
-            True if time/date context exists.
+        Detect relative or explicit date expressions.
         """
 
         if any(
-            value in text
-            for value in TIME_TERMS
+            term in text
+            for term
+            in TIME_TERMS
         ):
 
             return True
 
-        if self.MONTH_DATE_PATTERN.search(
-            text
-        ):
-
-            return True
-
-        return bool(
-            self.NUMERIC_DATE_PATTERN.search(
+        if (
+            self.MONTH_DATE_PATTERN
+            .search(
                 text
             )
-        )
+        ):
 
-    def _contains_question_pattern(
-        self,
-        text: str,
-    ) -> bool:
-        """
-        Detect common weather/planning question forms.
+            return True
 
-        Args:
-            text:
-                Lowercase user input.
-
-        Returns:
-            True when a supported question pattern exists.
-        """
-
-        return any(
-            pattern in text
-            for pattern in QUESTION_PATTERNS
-        )
-
-    def _contains_local_city(
-        self,
-        text: str,
-    ) -> bool:
-        """
-        Detect city using the local alias dictionary.
-
-        Examples:
-
-        BLR
-        DEL
-        BOM
-        NYC
-        LDN
-        DXB
-
-        Args:
-            text:
-                Lowercase user input.
-
-        Returns:
-            True when a local alias/canonical city is found.
-        """
-
-        tokens = self.TOKEN_PATTERN.findall(
-            text
-        )
-
-        for token in tokens:
-
-            resolved_city = resolve_city(
-                token
+        if (
+            self.NUMERIC_DATE_PATTERN
+            .search(
+                text
             )
+        ):
 
-            # Local alias detected.
+            return True
 
-            if (
-                resolved_city.lower()
-                != token.lower()
+        return False
+
+    # ==========================================================
+    # CANONICAL CITY MATCHING
+    # ==========================================================
+
+    def _contains_canonical_city(
+        self,
+        text: str,
+    ) -> bool:
+        """
+        Search canonical city names through normal prose.
+
+        Short aliases are deliberately excluded because airport
+        codes can overlap ordinary English words.
+        """
+
+        for city in (
+            self.KNOWN_CITIES
+        ):
+
+            if self._contains_phrase(
+                text,
+                city,
             ):
 
                 return True
 
-            # Locally-known canonical city.
+        return False
 
-            if (
-                resolved_city.lower()
-                in self.KNOWN_CITIES
-            ):
+    # ==========================================================
+    # LOCAL LOCATION RESOLUTION
+    # ==========================================================
 
-                return True
+    def _is_local_location(
+        self,
+        candidate: str,
+    ) -> bool:
+        """
+        Resolve an extracted candidate through local aliases.
+        """
 
-        # Multi-word cities such as:
-        #
-        # New York
-        # Los Angeles
-        # San Francisco
-
-        return any(
-            city in text
-            for city in self.KNOWN_CITIES
+        normalized = (
+            candidate
+            .strip()
+            .lower()
         )
+
+        if not normalized:
+
+            return False
+
+        if normalized in (
+            self.KNOWN_ALIASES
+        ):
+
+            return True
+
+        if normalized in (
+            self.KNOWN_CITIES
+        ):
+
+            return True
+
+        resolved = resolve_city(
+            candidate
+        )
+
+        return (
+            resolved.lower()
+            in self.KNOWN_CITIES
+        )
+
+    # ==========================================================
+    # PHRASE MATCHING
+    # ==========================================================
+
+    @staticmethod
+    def _contains_phrase(
+        text: str,
+        phrase: str,
+    ) -> bool:
+        """
+        Match complete phrase boundaries.
+        """
+
+        pattern = (
+            r"(?<![a-z])"
+            + re.escape(
+                phrase
+            )
+            + r"(?![a-z])"
+        )
+
+        return bool(
+            re.search(
+                pattern,
+                text,
+                re.IGNORECASE,
+            )
+        )
+
+    # ==========================================================
+    # LOCATION NORMALIZATION
+    # ==========================================================
 
     def _normalize_location_candidate(
         self,
         candidate: str,
     ) -> str:
         """
-        Normalize an extracted location phrase.
-
-        Removes leading planning/action words that may have been
-        captured because a preceding preposition matched first.
+        Normalize location candidate.
 
         Examples:
 
-            visit reykjavik
-                -> reykjavik
-
-            visiting paris
+            visit paris
                 -> paris
 
             travel to rio de janeiro
                 -> rio de janeiro
 
-        Args:
-            candidate:
-                Raw extracted location candidate.
-
-        Returns:
-            Normalized location candidate.
+            testopolis in
+                -> testopolis
         """
 
         normalized = " ".join(
             candidate.split()
-        ).strip(
-            " .,'-\t\n"
+        )
+
+        normalized = (
+            normalized.strip(
+                " .,'-\t\n"
+            )
         )
 
         if not normalized:
 
             return ""
+
+        # ------------------------------------------------------
+        # Remove leading planning/action terms.
+        # ------------------------------------------------------
 
         changed = True
 
@@ -624,40 +651,79 @@ class WeatherIntentValidator(
 
                     break
 
+        # ------------------------------------------------------
+        # Remove trailing connector words.
+        #
+        # Example:
+        #
+        # testopolis in
+        #     ↓
+        # testopolis
+        # ------------------------------------------------------
+
+        changed = True
+
+        while changed:
+
+            changed = False
+
+            for suffix in (
+                self.LOCATION_TRAILING_CONNECTORS
+            ):
+
+                if normalized.endswith(
+                    suffix
+                ):
+
+                    normalized = (
+                        normalized[
+                            :-
+                            len(
+                                suffix
+                            )
+                        ]
+                        .strip()
+                    )
+
+                    changed = True
+
+                    break
+
         return normalized
+
+    # ==========================================================
+    # LOCATION EXTRACTION
+    # ==========================================================
 
     def _extract_location_candidates(
         self,
         text: str,
-    ) -> tuple[str, ...]:
+    ) -> tuple[
+        str,
+        ...,
+    ]:
         """
-        Extract plausible global location phrases.
+        Extract plausible locations.
 
         Examples:
 
-            Can I plan for Dehradun next week?
-                -> dehradun
+            Can I visit Testopolis next week?
+                -> testopolis
 
-            Which day is better to visit Reykjavik?
-                -> reykjavik
+            Can I plant for Testopolis in upcoming week?
+                -> testopolis
 
-            Should I travel to Rio de Janeiro tomorrow?
-                -> rio de janeiro
-
-        No LLM or NER model is required.
-
-        Args:
-            text:
-                Lowercase user input.
-
-        Returns:
-            Unique location candidates.
+            Can I plan for Faketown next week?
+                -> faketown
         """
 
-        candidates: list[str] = []
+        candidates: list[
+            str
+        ] = []
 
         for match in (
-            self.LOCATION_PHRASE_PATTERN.finditer(
+            self.LOCATION_PHRASE_PATTERN
+            .finditer(
                 text
             )
         ):
@@ -668,15 +734,24 @@ class WeatherIntentValidator(
                 )
             )
 
-            if len(candidate) < 2:
+            if (
+                len(candidate)
+                < 2
+            ):
 
                 continue
 
-            if candidate in TIME_TERMS:
+            if (
+                candidate
+                in TIME_TERMS
+            ):
 
                 continue
 
-            if candidate not in candidates:
+            if (
+                candidate
+                not in candidates
+            ):
 
                 candidates.append(
                     candidate
@@ -686,49 +761,31 @@ class WeatherIntentValidator(
             candidates
         )
 
-    def _contains_global_city(
+    # ==========================================================
+    # STANDARD FAILURE
+    # ==========================================================
+
+    def _outside_domain(
         self,
-        text: str,
-    ) -> bool:
+    ) -> ValidationResult:
         """
-        Validate extracted location candidates globally.
-
-        Production uses Open-Meteo geocoding.
-
-        External failures fail closed and never crash the
-        guardrail pipeline.
-
-        Args:
-            text:
-                Lowercase user input.
-
-        Returns:
-            True when a valid global populated place is found.
+        Return standard weather-domain failure.
         """
 
-        candidates = (
-            self._extract_location_candidates(
-                text
+        return (
+            ValidationResult.failure(
+                error_code=(
+                    "OUTSIDE_WEATHER_DOMAIN"
+                ),
+                message=(
+                    "This assistant only supports "
+                    "weather-related requests."
+                ),
+                validator=(
+                    self.__class__.__name__
+                ),
+                category=(
+                    "Domain Validation"
+                ),
             )
         )
-
-        for candidate in candidates:
-
-            try:
-
-                if self._location_lookup(
-                    candidate
-                ):
-
-                    return True
-
-            except Exception:
-
-                # Geocoding is a fallback validation mechanism.
-                #
-                # Network/API failures must never crash input
-                # validation.
-
-                continue
-
-        return False

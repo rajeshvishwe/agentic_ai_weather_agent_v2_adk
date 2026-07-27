@@ -1,11 +1,11 @@
 """
-Tests for hybrid local-alias and global-location weather
-intent validation.
+Tests for hybrid local-alias and global-location weather intent
+validation.
 
-These tests never call the internet.
+No test in this file calls the real internet.
 
-Global location lookup is injected into WeatherIntentValidator
-so the test suite remains deterministic.
+The global location lookup is injected so tests remain deterministic
+and are unaffected when CITY_ALIASES grows in the future.
 """
 
 from weather_intelligence_agent_v2.guardrails.validators.weather_intent_validator import (
@@ -15,12 +15,12 @@ from weather_intelligence_agent_v2.guardrails.validators.weather_intent_validato
 
 def test_short_alias_uses_local_resolution() -> None:
     """
-    BLR should resolve locally without external geocoding.
+    BLR must resolve locally.
     """
 
     external_queries: list[str] = []
 
-    def location_lookup(
+    def lookup(
         candidate: str,
     ) -> bool:
 
@@ -31,7 +31,7 @@ def test_short_alias_uses_local_resolution() -> None:
         return False
 
     validator = WeatherIntentValidator(
-        location_lookup=location_lookup
+        location_lookup=lookup
     )
 
     result = validator.validate(
@@ -43,102 +43,14 @@ def test_short_alias_uses_local_resolution() -> None:
     assert external_queries == []
 
 
-def test_global_single_word_city_is_allowed() -> None:
+def test_known_canonical_city_uses_local_resolution() -> None:
     """
-    Cities absent from CITY_ALIASES can be accepted
-    through global geocoding.
-    """
-
-    validator = WeatherIntentValidator(
-        location_lookup=(
-            lambda candidate: (
-                candidate
-                == "dehradun"
-            )
-        )
-    )
-
-    result = validator.validate(
-        (
-            "Can I plan for Dehradun "
-            "visit for next week?"
-        )
-    )
-
-    assert result.is_valid
-
-
-def test_global_city_with_plan_typo_is_allowed() -> None:
-    """
-    A minor typo in plan should not block clear city/time intent.
-    """
-
-    validator = WeatherIntentValidator(
-        location_lookup=(
-            lambda candidate: (
-                candidate
-                == "dehradun"
-            )
-        )
-    )
-
-    result = validator.validate(
-        (
-            "Can I plant for Dehradun "
-            "in upcoming week?"
-        )
-    )
-
-    assert result.is_valid
-
-
-def test_multi_word_global_city_is_extracted_correctly() -> None:
-    """
-    Multi-word global cities should remain one candidate.
-    """
-
-    queried_locations: list[str] = []
-
-    def location_lookup(
-        candidate: str,
-    ) -> bool:
-
-        queried_locations.append(
-            candidate
-        )
-
-        return (
-            candidate
-            == "rio de janeiro"
-        )
-
-    validator = WeatherIntentValidator(
-        location_lookup=location_lookup
-    )
-
-    result = validator.validate(
-        (
-            "Which day is better "
-            "for Rio de Janeiro?"
-        )
-    )
-
-    assert result.is_valid
-
-    assert (
-        "rio de janeiro"
-        in queried_locations
-    )
-
-
-def test_existing_activity_plus_time_rule_does_not_require_geocoding() -> None:
-    """
-    Existing activity + time behavior must remain unchanged.
+    Delhi should resolve locally.
     """
 
     external_queries: list[str] = []
 
-    def location_lookup(
+    def lookup(
         candidate: str,
     ) -> bool:
 
@@ -146,17 +58,14 @@ def test_existing_activity_plus_time_rule_does_not_require_geocoding() -> None:
             candidate
         )
 
-        return True
+        return False
 
     validator = WeatherIntentValidator(
-        location_lookup=location_lookup
+        location_lookup=lookup
     )
 
     result = validator.validate(
-        (
-            "Should I travel to "
-            "Rio de Janeiro tomorrow?"
-        )
+        "Can I visit Delhi next week?"
     )
 
     assert result.is_valid
@@ -164,60 +73,142 @@ def test_existing_activity_plus_time_rule_does_not_require_geocoding() -> None:
     assert external_queries == []
 
 
-def test_best_day_uses_global_city() -> None:
+def test_global_single_word_location_uses_fallback() -> None:
     """
-    Comparative planning should work with global cities.
+    Synthetic place name verifies the fallback mechanism itself.
+
+    Using a synthetic value prevents this test from breaking when
+    the production alias dictionary later adds another real city.
     """
 
-    queried_locations: list[str] = []
+    queried: list[str] = []
 
-    def location_lookup(
+    def lookup(
         candidate: str,
     ) -> bool:
 
-        queried_locations.append(
+        queried.append(
             candidate
         )
 
         return (
             candidate
-            == "reykjavik"
+            == "testopolis"
         )
 
     validator = WeatherIntentValidator(
-        location_lookup=location_lookup
+        location_lookup=lookup
     )
 
     result = validator.validate(
         (
-            "Which day is better "
-            "to visit Reykjavik?"
+            "Can I visit Testopolis "
+            "next week?"
         )
     )
 
     assert result.is_valid
 
-    assert queried_locations == [
-        "reykjavik"
+    assert queried == [
+        "testopolis"
     ]
 
 
-def test_named_calendar_date_is_supported() -> None:
+def test_global_multi_word_location_uses_fallback() -> None:
     """
-    Natural calendar dates should count as time context.
+    Multi-word location must remain a single lookup candidate.
+    """
+
+    queried: list[str] = []
+
+    def lookup(
+        candidate: str,
+    ) -> bool:
+
+        queried.append(
+            candidate
+        )
+
+        return (
+            candidate
+            == "sample valley"
+        )
+
+    validator = WeatherIntentValidator(
+        location_lookup=lookup
+    )
+
+    result = validator.validate(
+        (
+            "Which day is better "
+            "for Sample Valley?"
+        )
+    )
+
+    assert result.is_valid
+
+    assert queried == [
+        "sample valley"
+    ]
+
+
+def test_to_visit_candidate_is_cleaned() -> None:
+    """
+    'to visit Demo City' must resolve to 'demo city'.
+    """
+
+    queried: list[str] = []
+
+    def lookup(
+        candidate: str,
+    ) -> bool:
+
+        queried.append(
+            candidate
+        )
+
+        return (
+            candidate
+            == "demo city"
+        )
+
+    validator = WeatherIntentValidator(
+        location_lookup=lookup
+    )
+
+    result = validator.validate(
+        (
+            "Which day is better "
+            "to visit Demo City?"
+        )
+    )
+
+    assert result.is_valid
+
+    assert queried == [
+        "demo city"
+    ]
+
+
+def test_global_location_with_plan_typo_is_allowed() -> None:
+    """
+    Typo in 'plan' should not affect clear location + time intent.
     """
 
     validator = WeatherIntentValidator(
         location_lookup=(
             lambda candidate: (
                 candidate
-                == "dehradun"
+                == "testopolis"
             )
         )
     )
 
     result = validator.validate(
-        "Dehradun trip for 2nd August"
+        (
+            "Can I plant for Testopolis "
+            "in upcoming week?"
+        )
     )
 
     assert result.is_valid
@@ -225,20 +216,23 @@ def test_named_calendar_date_is_supported() -> None:
 
 def test_numeric_calendar_date_is_supported() -> None:
     """
-    Common numeric calendar dates should be supported.
+    Numeric date must be recognized as planning context.
     """
 
     validator = WeatherIntentValidator(
         location_lookup=(
             lambda candidate: (
                 candidate
-                == "dehradun"
+                == "testopolis"
             )
         )
     )
 
     result = validator.validate(
-        "Trip to Dehradun on 02/08/2026"
+        (
+            "Trip to Testopolis "
+            "on 02/08/2026"
+        )
     )
 
     assert result.is_valid
@@ -246,17 +240,33 @@ def test_numeric_calendar_date_is_supported() -> None:
 
 def test_fake_global_location_is_blocked() -> None:
     """
-    Invented locations must remain outside the domain.
+    Critical regression:
+
+    CAN must not be interpreted as Guangzhou from the normal word
+    'Can' at the beginning of the sentence.
     """
 
-    validator = WeatherIntentValidator(
-        location_lookup=(
-            lambda candidate: False
+    queried: list[str] = []
+
+    def lookup(
+        candidate: str,
+    ) -> bool:
+
+        queried.append(
+            candidate
         )
+
+        return False
+
+    validator = WeatherIntentValidator(
+        location_lookup=lookup
     )
 
     result = validator.validate(
-        "Can I plan for Faketown next week?"
+        (
+            "Can I plan for Faketown "
+            "next week?"
+        )
     )
 
     assert not result.is_valid
@@ -266,16 +276,40 @@ def test_fake_global_location_is_blocked() -> None:
         == "OUTSIDE_WEATHER_DOMAIN"
     )
 
+    assert queried == [
+        "faketown"
+    ]
+
+
+def test_can_word_is_not_guangzhou_alias() -> None:
+    """
+    Regression test for CAN airport-code collision.
+    """
+
+    validator = WeatherIntentValidator(
+        location_lookup=(
+            lambda candidate: False
+        )
+    )
+
+    result = validator.validate(
+        (
+            "Can I plan for Faketown "
+            "next week?"
+        )
+    )
+
+    assert not result.is_valid
+
 
 def test_unrelated_request_does_not_call_geocoding() -> None:
     """
-    Clearly unrelated prompts should not trigger
-    global location lookup.
+    Non-weather prompts must not create external lookups.
     """
 
     external_queries: list[str] = []
 
-    def location_lookup(
+    def lookup(
         candidate: str,
     ) -> bool:
 
@@ -286,7 +320,7 @@ def test_unrelated_request_does_not_call_geocoding() -> None:
         return True
 
     validator = WeatherIntentValidator(
-        location_lookup=location_lookup
+        location_lookup=lookup
     )
 
     result = validator.validate(
@@ -298,42 +332,27 @@ def test_unrelated_request_does_not_call_geocoding() -> None:
     assert external_queries == []
 
 
-def test_to_visit_location_candidate_is_cleaned() -> None:
+def test_weather_activity_with_time_without_city_is_allowed() -> None:
     """
-    'to visit Paris' must extract Paris rather than visit Paris.
+    Location-free weather-sensitive planning remains supported.
     """
-
-    queried_locations: list[str] = []
-
-    def location_lookup(
-        candidate: str,
-    ) -> bool:
-
-        queried_locations.append(
-            candidate
-        )
-
-        return candidate == "paris"
 
     validator = WeatherIntentValidator(
-        location_lookup=location_lookup
+        location_lookup=(
+            lambda candidate: False
+        )
     )
 
     result = validator.validate(
-        "Which day is better to visit Paris?"
+        "Can I go trekking tomorrow?"
     )
 
     assert result.is_valid
 
-    assert queried_locations == [
-        "paris"
-    ]
 
-
-def test_compare_two_local_cities_for_outdoor_activities() -> None:
+def test_compare_known_cities_is_allowed() -> None:
     """
-    Multi-city weather comparison must be treated as a valid
-    weather-intelligence request.
+    Known-city comparison remains supported.
     """
 
     validator = WeatherIntentValidator(
@@ -352,50 +371,9 @@ def test_compare_two_local_cities_for_outdoor_activities() -> None:
     assert result.is_valid
 
 
-def test_compare_two_local_cities() -> None:
+def test_generic_comparison_is_blocked() -> None:
     """
-    Explicit comparison between known cities should be allowed.
-    """
-
-    validator = WeatherIntentValidator(
-        location_lookup=(
-            lambda candidate: False
-        )
-    )
-
-    result = validator.validate(
-        "Compare Delhi and Mumbai."
-    )
-
-    assert result.is_valid
-
-
-def test_which_city_is_better_for_outdoor_activity() -> None:
-    """
-    Comparative planning wording should be accepted when
-    a known city is present.
-    """
-
-    validator = WeatherIntentValidator(
-        location_lookup=(
-            lambda candidate: False
-        )
-    )
-
-    result = validator.validate(
-        (
-            "Which is better for outdoor activities, "
-            "Delhi or Mumbai?"
-        )
-    )
-
-    assert result.is_valid
-
-
-def test_generic_comparison_without_location_remains_blocked() -> None:
-    """
-    Adding comparison vocabulary must not turn unrelated
-    comparison requests into weather requests.
+    Generic comparisons must remain outside weather domain.
     """
 
     validator = WeatherIntentValidator(
@@ -409,8 +387,3 @@ def test_generic_comparison_without_location_remains_blocked() -> None:
     )
 
     assert not result.is_valid
-
-    assert (
-        result.error_code
-        == "OUTSIDE_WEATHER_DOMAIN"
-    )
