@@ -1,13 +1,13 @@
 --to start backend server & trigger UI:
 
---To start server: (in parent directory)
+--To start server: (in parent directory) in mac-os
 
 source weather_intelligence_agent_v2/.venv/bin/activate
 
 uvicorn weather_intelligence_agent_v2.api.app:app \
   --host 0.0.0.0 \
   --port 8082 \
-  --reload
+  --reloapip install -r requirements.txtd
 
 --To start UI:
 
@@ -15,6 +15,20 @@ PYTHONPATH=/Users/rajeshvishwe/GenAI_Projects \
 WEATHER_API_BASE_URL=http://localhost:8082 \
 streamlit run weather_intelligence_agent_v2/ui/streamlit_app.py
 2026-07-26 19:27:58.537 Uvicorn server started on :::8501
+
+in windows : (parent directory - main folder)
+
+to server: 
+uvicorn weather_intelligence_agent_v2.api.app:app --host 0.0.0.0 --port 8082 --reload
+
+to UI: 
+1) python -m streamlit run weather_intelligence_agent_v2\ui\streamlit_app.py
+
+2) 
+$env:PYTHONPATH="C:\p\google_adk_projects"
+$env:WEATHER_API_BASE_URL="http://localhost:8082"
+
+python -m streamlit run weather_intelligence_agent_v2\ui\streamlit_app.py
 
 Phase 13.1 — Final Architecture Summary
 
