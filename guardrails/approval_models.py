@@ -1,10 +1,30 @@
 """
 Human-in-the-loop approval domain models.
 
-These models represent the lifecycle of tool-execution approval requests.
+These models represent both:
 
-The implementation is framework-independent so approval state can later
-be stored in memory, Redis, Firestore, or another persistent backend.
+1. Human approval lifecycle
+2. Post-approval tool execution lifecycle
+
+Approval and execution are intentionally modeled separately.
+
+Example:
+
+PENDING
+   ↓
+APPROVED
+   ↓
+EXECUTED
+
+or:
+
+PENDING
+   ↓
+APPROVED
+   ↓
+EXECUTION_FAILED
+
+A rejected request never executes.
 """
 
 from __future__ import annotations
@@ -20,9 +40,12 @@ from weather_intelligence_agent_v2.guardrails.config.hitl_policy import (
 )
 
 
-class ApprovalStatus(str, Enum):
+class ApprovalStatus(
+    str,
+    Enum,
+):
     """
-    Lifecycle status of a human approval request.
+    Human approval lifecycle.
     """
 
     PENDING = "PENDING"
@@ -30,32 +53,23 @@ class ApprovalStatus(str, Enum):
     REJECTED = "REJECTED"
 
 
+class ApprovalExecutionStatus(
+    str,
+    Enum,
+):
+    """
+    Post-approval tool execution lifecycle.
+    """
+
+    NOT_STARTED = "NOT_STARTED"
+    EXECUTED = "EXECUTED"
+    FAILED = "FAILED"
+
+
 @dataclass
 class ApprovalRequest:
     """
-    Represent a tool execution awaiting human approval.
-
-    Attributes:
-        request_id:
-            Unique approval request identifier.
-
-        tool_name:
-            Tool requesting execution.
-
-        arguments:
-            Tool arguments requiring approval.
-
-        approval_level:
-            Required approval level.
-
-        status:
-            Current approval lifecycle state.
-
-        created_at:
-            UTC timestamp when the request was created.
-
-        resolved_at:
-            UTC timestamp when approved or rejected.
+    Represent a HITL tool-execution request.
     """
 
     tool_name: str
@@ -63,55 +77,203 @@ class ApprovalRequest:
     approval_level: ApprovalLevel
 
     request_id: str = field(
-        default_factory=lambda: str(uuid4())
+        default_factory=lambda: str(
+            uuid4()
+        )
     )
 
-    status: ApprovalStatus = ApprovalStatus.PENDING
+    status: ApprovalStatus = (
+        ApprovalStatus.PENDING
+    )
 
     created_at: datetime = field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: (
+            datetime.now(
+                timezone.utc
+            )
+        )
     )
 
-    resolved_at: datetime | None = None
+    resolved_at: (
+        datetime
+        | None
+    ) = None
 
-    def approve(self) -> None:
+    execution_status: (
+        ApprovalExecutionStatus
+    ) = (
+        ApprovalExecutionStatus
+        .NOT_STARTED
+    )
+
+    executed_at: (
+        datetime
+        | None
+    ) = None
+
+    execution_result: (
+        dict[str, Any]
+        | None
+    ) = None
+
+    execution_error: (
+        str
+        | None
+    ) = None
+
+    def approve(
+        self,
+    ) -> None:
         """
-        Mark the request as approved.
-
-        Raises:
-            ValueError:
-                If the request has already been resolved.
+        Approve pending request.
         """
 
         self._ensure_pending()
 
-        self.status = ApprovalStatus.APPROVED
-        self.resolved_at = datetime.now(timezone.utc)
+        self.status = (
+            ApprovalStatus.APPROVED
+        )
 
-    def reject(self) -> None:
+        self.resolved_at = (
+            datetime.now(
+                timezone.utc
+            )
+        )
+
+    def reject(
+        self,
+    ) -> None:
         """
-        Mark the request as rejected.
-
-        Raises:
-            ValueError:
-                If the request has already been resolved.
+        Reject pending request.
         """
 
         self._ensure_pending()
 
-        self.status = ApprovalStatus.REJECTED
-        self.resolved_at = datetime.now(timezone.utc)
+        self.status = (
+            ApprovalStatus.REJECTED
+        )
 
-    def _ensure_pending(self) -> None:
+        self.resolved_at = (
+            datetime.now(
+                timezone.utc
+            )
+        )
+
+    def mark_execution_success(
+        self,
+        result: dict[
+            str,
+            Any,
+        ],
+    ) -> None:
         """
-        Ensure the request has not already been resolved.
-
-        Raises:
-            ValueError:
-                If the request is already approved or rejected.
+        Record successful approved-tool execution.
         """
 
-        if self.status != ApprovalStatus.PENDING:
+        self._ensure_approved()
+
+        self._ensure_not_executed()
+
+        self.execution_status = (
+            ApprovalExecutionStatus
+            .EXECUTED
+        )
+
+        self.execution_result = dict(
+            result
+        )
+
+        self.execution_error = None
+
+        self.executed_at = (
+            datetime.now(
+                timezone.utc
+            )
+        )
+
+    def mark_execution_failure(
+        self,
+        message: str,
+    ) -> None:
+        """
+        Record failed approved-tool execution.
+        """
+
+        self._ensure_approved()
+
+        self._ensure_not_executed()
+
+        self.execution_status = (
+            ApprovalExecutionStatus
+            .FAILED
+        )
+
+        self.execution_error = (
+            message
+        )
+
+        self.execution_result = None
+
+        self.executed_at = (
+            datetime.now(
+                timezone.utc
+            )
+        )
+
+    def _ensure_pending(
+        self,
+    ) -> None:
+        """
+        Ensure human decision has not already occurred.
+        """
+
+        if (
+            self.status
+            != ApprovalStatus.PENDING
+        ):
+
             raise ValueError(
-                "Approval request has already been resolved."
+                (
+                    "Approval request has "
+                    "already been resolved."
+                )
+            )
+
+    def _ensure_approved(
+        self,
+    ) -> None:
+        """
+        Ensure execution only follows approval.
+        """
+
+        if (
+            self.status
+            != ApprovalStatus.APPROVED
+        ):
+
+            raise ValueError(
+                (
+                    "Tool execution requires "
+                    "an approved request."
+                )
+            )
+
+    def _ensure_not_executed(
+        self,
+    ) -> None:
+        """
+        Prevent duplicate tool execution.
+        """
+
+        if (
+            self.execution_status
+            != ApprovalExecutionStatus
+            .NOT_STARTED
+        ):
+
+            raise ValueError(
+                (
+                    "Approved tool execution "
+                    "has already been attempted."
+                )
             )

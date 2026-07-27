@@ -1,24 +1,26 @@
 """
 Streamlit Human-in-the-Loop approval UI.
 
-This component displays HITL approval requests created by the
-FastAPI / Google ADK backend.
+This component provides the presentation layer for HITL approval
+requests created by the Weather Intelligence backend.
 
 Responsibilities:
 
 - retrieve pending approval requests
-- display tool name and arguments
-- display approval level
-- allow human approval
-- allow human rejection
-- optionally display resolved approval history
+- display tool details and arguments
+- approve and execute approved actions
+- reject pending actions
+- display execution status
+- display execution result
+- append approval/execution outcomes to the visible chat history
+- display resolved approval history
 
 Important:
 
-The current backend manages approval state only.
+This phase provides Streamlit conversation continuation.
 
-Approving a request does not yet resume or execute the suspended
-Google ADK tool call automatically.
+It does not yet inject the post-approval execution result back into
+the Google ADK session/event stream.
 """
 
 from __future__ import annotations
@@ -31,6 +33,253 @@ from weather_intelligence_agent_v2.ui.api_client import (
     WeatherApiClient,
     WeatherApiError,
 )
+
+
+# ============================================================
+# CHAT HELPERS
+# ============================================================
+
+
+def _append_assistant_message(
+    message: str,
+) -> None:
+    """
+    Append one assistant message to visible Streamlit chat history.
+
+    Duplicate consecutive messages are avoided because Streamlit
+    reruns frequently.
+
+    Args:
+        message:
+            Assistant message to append.
+    """
+
+    normalized_message = (
+        message.strip()
+    )
+
+    if not normalized_message:
+        return
+
+    messages = (
+        st.session_state
+        .chat_messages
+    )
+
+    if messages:
+
+        last_message = (
+            messages[-1]
+        )
+
+        if (
+            last_message.get("role")
+            == "assistant"
+            and last_message.get(
+                "content"
+            )
+            == normalized_message
+        ):
+
+            return
+
+    messages.append(
+        {
+            "role": "assistant",
+            "content": (
+                normalized_message
+            ),
+        }
+    )
+
+
+def _build_execution_message(
+    approval: dict[
+        str,
+        Any,
+    ],
+) -> str:
+    """
+    Build user-facing assistant confirmation after execution.
+
+    Args:
+        approval:
+            Approval API response.
+
+    Returns:
+        Natural-language assistant confirmation.
+    """
+
+    tool_name = str(
+        approval.get(
+            "tool_name",
+            "",
+        )
+    )
+
+    execution_status = str(
+        approval.get(
+            "execution_status",
+            "NOT_STARTED",
+        )
+    ).upper()
+
+    execution_result = (
+        approval.get(
+            "execution_result"
+        )
+    )
+
+    # --------------------------------------------------------
+    # Weather reminder success
+    # --------------------------------------------------------
+
+    if (
+        tool_name
+        == "create_weather_reminder"
+        and execution_status
+        == "EXECUTED"
+        and isinstance(
+            execution_result,
+            dict,
+        )
+    ):
+
+        city = str(
+            execution_result.get(
+                "city",
+                "",
+            )
+        ).strip()
+
+        reminder_time = str(
+            execution_result.get(
+                "reminder_time",
+                "",
+            )
+        ).strip()
+
+        reminder_message = str(
+            execution_result.get(
+                "message",
+                "",
+            )
+        ).strip()
+
+        parts: list[str] = [
+            "✅ Your weather reminder"
+        ]
+
+        if city:
+
+            parts.append(
+                f"for **{city}**"
+            )
+
+        if reminder_time:
+
+            parts.append(
+                f"for **{reminder_time}**"
+            )
+
+        confirmation = (
+            " ".join(
+                parts
+            )
+            + " has been created successfully."
+        )
+
+        if reminder_message:
+
+            confirmation += (
+                "\n\n"
+                f"**Reminder:** "
+                f"{reminder_message}"
+            )
+
+        return confirmation
+
+    # --------------------------------------------------------
+    # Generic execution success
+    # --------------------------------------------------------
+
+    if (
+        execution_status
+        == "EXECUTED"
+    ):
+
+        return (
+            "✅ The approved action was "
+            "executed successfully."
+        )
+
+    # --------------------------------------------------------
+    # Execution failure
+    # --------------------------------------------------------
+
+    if (
+        execution_status
+        == "FAILED"
+    ):
+
+        return (
+            "⚠️ Human approval was granted, "
+            "but the requested action could "
+            "not be executed successfully."
+        )
+
+    # --------------------------------------------------------
+    # Fallback
+    # --------------------------------------------------------
+
+    return (
+        "✅ Human approval was recorded."
+    )
+
+
+def _build_rejection_message(
+    approval: dict[
+        str,
+        Any,
+    ],
+) -> str:
+    """
+    Build conversational rejection message.
+
+    Args:
+        approval:
+            Rejected approval response.
+
+    Returns:
+        User-facing rejection message.
+    """
+
+    tool_name = str(
+        approval.get(
+            "tool_name",
+            "",
+        )
+    )
+
+    if (
+        tool_name
+        == "create_weather_reminder"
+    ):
+
+        return (
+            "❌ The weather reminder request "
+            "was rejected and was not executed."
+        )
+
+    return (
+        "❌ The requested action was rejected "
+        "and was not executed."
+    )
+
+
+# ============================================================
+# PRESENTATION HELPERS
+# ============================================================
 
 
 def _render_arguments(
@@ -57,6 +306,105 @@ def _render_arguments(
     )
 
 
+def _render_execution(
+    approval: dict[
+        str,
+        Any,
+    ],
+) -> None:
+    """
+    Render post-approval execution state.
+    """
+
+    execution_status = str(
+        approval.get(
+            "execution_status",
+            "NOT_STARTED",
+        )
+    ).upper()
+
+    # --------------------------------------------------------
+    # Successful execution
+    # --------------------------------------------------------
+
+    if (
+        execution_status
+        == "EXECUTED"
+    ):
+
+        st.success(
+            (
+                "✅ Approved tool executed "
+                "successfully."
+            )
+        )
+
+        result = approval.get(
+            "execution_result"
+        )
+
+        if isinstance(
+            result,
+            dict,
+        ):
+
+            st.markdown(
+                "**Execution Result**"
+            )
+
+            st.json(
+                result,
+                expanded=False,
+            )
+
+        return
+
+    # --------------------------------------------------------
+    # Failed execution
+    # --------------------------------------------------------
+
+    if (
+        execution_status
+        == "FAILED"
+    ):
+
+        st.error(
+            (
+                "Approved tool execution "
+                "failed."
+            )
+        )
+
+        execution_error = (
+            approval.get(
+                "execution_error"
+            )
+        )
+
+        if execution_error:
+
+            st.caption(
+                str(
+                    execution_error
+                )
+            )
+
+        return
+
+    # --------------------------------------------------------
+    # Not executed
+    # --------------------------------------------------------
+
+    st.caption(
+        "Execution has not started."
+    )
+
+
+# ============================================================
+# APPROVAL REQUEST
+# ============================================================
+
+
 def _render_approval_request(
     api_client: WeatherApiClient,
     approval: dict[
@@ -65,7 +413,14 @@ def _render_approval_request(
     ],
 ) -> None:
     """
-    Render one HITL approval request.
+    Render one approval request.
+
+    Pending requests provide:
+
+    - Approve & Execute
+    - Reject
+
+    Resolved requests display their final state.
     """
 
     request_id = str(
@@ -94,7 +449,7 @@ def _render_approval_request(
             "status",
             "Unknown",
         )
-    )
+    ).upper()
 
     arguments = approval.get(
         "arguments",
@@ -112,25 +467,33 @@ def _render_approval_request(
         border=True,
     ):
 
+        # ----------------------------------------------------
+        # Header
+        # ----------------------------------------------------
+
         st.markdown(
             f"#### 🔐 {tool_name}"
         )
 
-        metadata_column_1, (
-            metadata_column_2
-        ) = st.columns(
-            2
+        column_1, column_2 = (
+            st.columns(
+                2
+            )
         )
 
-        metadata_column_1.metric(
+        column_1.metric(
             "Approval Level",
             approval_level,
         )
 
-        metadata_column_2.metric(
-            "Status",
+        column_2.metric(
+            "Approval Status",
             approval_status,
         )
+
+        # ----------------------------------------------------
+        # Arguments
+        # ----------------------------------------------------
 
         st.markdown(
             "**Requested Arguments**"
@@ -140,110 +503,161 @@ def _render_approval_request(
             arguments
         )
 
+        # ====================================================
+        # PENDING
+        # ====================================================
+
         if (
-            approval_status.upper()
-            != "PENDING"
+            approval_status
+            == "PENDING"
         ):
 
-            if (
-                approval_status.upper()
-                == "APPROVED"
-            ):
+            approve_column, (
+                reject_column
+            ) = st.columns(
+                2
+            )
 
-                st.success(
-                    "Approved"
-                )
+            # ------------------------------------------------
+            # APPROVE + EXECUTE
+            # ------------------------------------------------
 
-            elif (
-                approval_status.upper()
-                == "REJECTED"
-            ):
+            with approve_column:
 
-                st.error(
-                    "Rejected"
-                )
+                if st.button(
+                    "✅ Approve & Execute",
+                    key=(
+                        f"approve_{request_id}"
+                    ),
+                    width="stretch",
+                    type="primary",
+                ):
+
+                    try:
+
+                        updated_approval = (
+                            api_client
+                            .approve_request(
+                                request_id
+                            )
+                        )
+
+                        chat_message = (
+                            _build_execution_message(
+                                updated_approval
+                            )
+                        )
+
+                        _append_assistant_message(
+                            chat_message
+                        )
+
+                        st.rerun()
+
+                    except WeatherApiError as exc:
+
+                        st.error(
+                            str(
+                                exc
+                            )
+                        )
+
+            # ------------------------------------------------
+            # REJECT
+            # ------------------------------------------------
+
+            with reject_column:
+
+                if st.button(
+                    "❌ Reject",
+                    key=(
+                        f"reject_{request_id}"
+                    ),
+                    width="stretch",
+                ):
+
+                    try:
+
+                        updated_approval = (
+                            api_client
+                            .reject_request(
+                                request_id
+                            )
+                        )
+
+                        chat_message = (
+                            _build_rejection_message(
+                                updated_approval
+                            )
+                        )
+
+                        _append_assistant_message(
+                            chat_message
+                        )
+
+                        st.rerun()
+
+                    except WeatherApiError as exc:
+
+                        st.error(
+                            str(
+                                exc
+                            )
+                        )
 
             return
 
-        approve_column, (
-            reject_column
-        ) = st.columns(
-            2
-        )
+        # ====================================================
+        # REJECTED
+        # ====================================================
 
-        with approve_column:
+        if (
+            approval_status
+            == "REJECTED"
+        ):
 
-            if st.button(
-                "✅ Approve",
-                key=(
-                    f"approve_{request_id}"
-                ),
-                width="stretch",
-                type="primary",
-            ):
+            st.warning(
+                (
+                    "❌ Request rejected. "
+                    "Tool was not executed."
+                )
+            )
 
-                try:
+            return
 
-                    api_client.approve_request(
-                        request_id
-                    )
+        # ====================================================
+        # APPROVED
+        # ====================================================
 
-                    st.success(
-                        (
-                            "Approval request "
-                            "approved."
-                        )
-                    )
+        if (
+            approval_status
+            == "APPROVED"
+        ):
 
-                    st.rerun()
+            st.success(
+                "Human approval granted."
+            )
 
-                except WeatherApiError as exc:
+            _render_execution(
+                approval
+            )
 
-                    st.error(
-                        str(
-                            exc
-                        )
-                    )
 
-        with reject_column:
-
-            if st.button(
-                "❌ Reject",
-                key=(
-                    f"reject_{request_id}"
-                ),
-                width="stretch",
-            ):
-
-                try:
-
-                    api_client.reject_request(
-                        request_id
-                    )
-
-                    st.warning(
-                        (
-                            "Approval request "
-                            "rejected."
-                        )
-                    )
-
-                    st.rerun()
-
-                except WeatherApiError as exc:
-
-                    st.error(
-                        str(
-                            exc
-                        )
-                    )
+# ============================================================
+# MAIN HITL COMPONENT
+# ============================================================
 
 
 def render_hitl_approvals(
     api_client: WeatherApiClient,
 ) -> None:
     """
-    Render Human-in-the-Loop approval panel.
+    Render the complete Human-in-the-Loop panel.
+
+    Pending approval requests are displayed first.
+
+    Resolved approval history is available through an optional
+    toggle.
     """
 
     st.divider()
@@ -255,11 +669,15 @@ def render_hitl_approvals(
 
         st.caption(
             (
-                "Sensitive tool operations that "
-                "require human approval appear "
-                "here."
+                "Sensitive agent actions require "
+                "human confirmation before "
+                "execution."
             )
         )
+
+        # ----------------------------------------------------
+        # Pending approvals
+        # ----------------------------------------------------
 
         try:
 
@@ -295,21 +713,12 @@ def render_hitl_approvals(
                 )
             )
 
-            st.caption(
-                (
-                    "Current read-only weather "
-                    "tools are configured for "
-                    "automatic execution."
-                )
-            )
-
         else:
 
             st.warning(
                 (
-                    f"{len(pending)} approval "
-                    "request(s) require human "
-                    "attention."
+                    f"{len(pending)} request(s) "
+                    "require human attention."
                 )
             )
 
@@ -320,78 +729,70 @@ def render_hitl_approvals(
                     approval,
                 )
 
+        # ----------------------------------------------------
+        # Approval history
+        # ----------------------------------------------------
+
         show_history = st.toggle(
-            "Show resolved approval history",
+            (
+                "Show resolved approval "
+                "history"
+            ),
             value=False,
             key="show_hitl_history",
         )
 
-        if show_history:
+        if not show_history:
 
-            try:
+            return
 
-                all_requests = (
-                    api_client.list_approvals()
-                )
+        try:
 
-            except WeatherApiError as exc:
-
-                st.error(
-                    (
-                        "Unable to retrieve "
-                        "approval history."
-                    )
-                )
-
-                st.caption(
-                    str(
-                        exc
-                    )
-                )
-
-                return
-
-            resolved_requests = [
-                approval
-                for approval in all_requests
-                if str(
-                    approval.get(
-                        "status",
-                        "",
-                    )
-                ).upper()
-                != "PENDING"
-            ]
-
-            if not resolved_requests:
-
-                st.info(
-                    (
-                        "No resolved approval "
-                        "requests yet."
-                    )
-                )
-
-            else:
-
-                st.markdown(
-                    "### Approval History"
-                )
-
-                for approval in (
-                    resolved_requests
-                ):
-
-                    _render_approval_request(
-                        api_client,
-                        approval,
-                    )
-
-        st.info(
-            (
-                "Current HITL phase records "
-                "approval decisions only. "
-                "Approved tool execution is not "
-                "automatically resumed yet."
+            all_requests = (
+                api_client.list_approvals()
             )
+
+        except WeatherApiError as exc:
+
+            st.error(
+                str(
+                    exc
+                )
+            )
+
+            return
+
+        resolved = [
+            approval
+            for approval
+            in all_requests
+            if str(
+                approval.get(
+                    "status",
+                    "",
+                )
+            ).upper()
+            != "PENDING"
+        ]
+
+        if not resolved:
+
+            st.info(
+                (
+                    "No resolved approval "
+                    "requests yet."
+                )
+            )
+
+            return
+
+        st.markdown(
+            "### Approval History"
         )
+
+        for approval in resolved:
+
+            _render_approval_request(
+                api_client,
+                approval,
+            )

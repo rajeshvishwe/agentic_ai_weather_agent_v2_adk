@@ -1,22 +1,20 @@
 """
 In-memory HITL approval service.
 
-This service manages ApprovalRequest objects.
-
-The implementation is intentionally lightweight for local
-development and testing.
-
 Responsibilities:
 
-- create approval requests
-- retrieve approval requests
-- list approval requests
+- create requests
+- retrieve requests
+- list requests
 - approve requests
 - reject requests
-- emit Prometheus HITL metrics
+- record approved-tool execution
+- emit approval metrics
 
-A persistent implementation such as Redis or Firestore can later
-replace this service without changing the approval domain model.
+The storage implementation is currently process-local.
+
+Redis, Firestore, Cloud SQL, or another persistent backend can replace
+this implementation later.
 """
 
 from __future__ import annotations
@@ -41,10 +39,9 @@ class ApprovalService:
     Manage Human-in-the-Loop approval requests.
     """
 
-    def __init__(self) -> None:
-        """
-        Initialize the in-memory approval store.
-        """
+    def __init__(
+        self,
+    ) -> None:
 
         self._requests: dict[
             str,
@@ -55,9 +52,6 @@ class ApprovalService:
     def _approval_level_label(
         approval_level: ApprovalLevel,
     ) -> str:
-        """
-        Return stable metric label for approval level.
-        """
 
         value = getattr(
             approval_level,
@@ -69,6 +63,7 @@ class ApprovalService:
             value,
             str,
         ):
+
             return value
 
         return str(
@@ -83,7 +78,7 @@ class ApprovalService:
         approval_level: ApprovalLevel,
     ) -> ApprovalRequest:
         """
-        Create a new pending approval request.
+        Create pending approval request.
         """
 
         request = ApprovalRequest(
@@ -115,11 +110,7 @@ class ApprovalService:
         request_id: str,
     ) -> ApprovalRequest:
         """
-        Retrieve an approval request.
-
-        Raises:
-            KeyError:
-                If the request does not exist.
+        Retrieve request.
         """
 
         try:
@@ -131,30 +122,23 @@ class ApprovalService:
         except KeyError as exc:
 
             raise KeyError(
-                "Approval request was not found."
+                (
+                    "Approval request was "
+                    "not found."
+                )
             ) from exc
 
     def list_requests(
         self,
-        status: ApprovalStatus | None = None,
-    ) -> list[ApprovalRequest]:
+        status: (
+            ApprovalStatus
+            | None
+        ) = None,
+    ) -> list[
+        ApprovalRequest
+    ]:
         """
-        List approval requests.
-
-        Args:
-            status:
-                Optional status filter.
-
-                Examples:
-
-                PENDING
-                APPROVED
-                REJECTED
-
-                None returns all requests.
-
-        Returns:
-            Approval requests ordered newest first.
+        List requests newest first.
         """
 
         requests = list(
@@ -165,8 +149,10 @@ class ApprovalService:
 
             requests = [
                 request
-                for request in requests
-                if request.status == status
+                for request
+                in requests
+                if request.status
+                == status
             ]
 
         return sorted(
@@ -182,11 +168,15 @@ class ApprovalService:
         request_id: str,
     ) -> ApprovalRequest:
         """
-        Approve a pending request.
+        Approve request.
+
+        Execution remains a separate operation.
         """
 
-        request = self.get_request(
-            request_id
+        request = (
+            self.get_request(
+                request_id
+            )
         )
 
         request.approve()
@@ -202,11 +192,13 @@ class ApprovalService:
         request_id: str,
     ) -> ApprovalRequest:
         """
-        Reject a pending request.
+        Reject request.
         """
 
-        request = self.get_request(
-            request_id
+        request = (
+            self.get_request(
+                request_id
+            )
         )
 
         request.reject()

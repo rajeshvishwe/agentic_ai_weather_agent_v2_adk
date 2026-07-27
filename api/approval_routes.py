@@ -1,19 +1,19 @@
 """
 FastAPI routes for Human-in-the-Loop approval management.
 
-Endpoints support:
+Approval flow:
 
-- listing approval requests
-- inspecting one approval request
-- approving a pending request
-- rejecting a pending request
+PENDING
+    ↓
+Approve
+    ↓
+Security revalidation
+    ↓
+ApprovedToolExecutor
+    ↓
+EXECUTED / FAILED
 
-Important:
-
-This phase manages the approval lifecycle only.
-
-Approval does not yet automatically resume or execute the blocked
-Google ADK tool operation.
+Rejected requests never execute.
 """
 
 from __future__ import annotations
@@ -34,6 +34,9 @@ from weather_intelligence_agent_v2.guardrails.approval_models import (
 from weather_intelligence_agent_v2.schemas.approval_schema import (
     ApprovalResponse,
 )
+from weather_intelligence_agent_v2.services.approved_tool_executor import (
+    ApprovedToolExecutor,
+)
 
 
 router = APIRouter(
@@ -41,6 +44,11 @@ router = APIRouter(
     tags=[
         "HITL Approvals"
     ],
+)
+
+
+_APPROVED_TOOL_EXECUTOR = (
+    ApprovedToolExecutor()
 )
 
 
@@ -58,17 +66,11 @@ def list_approvals(
         default=None,
         alias="status",
     ),
-) -> list[ApprovalResponse]:
+) -> list[
+    ApprovalResponse
+]:
     """
-    List Human-in-the-Loop approval requests.
-
-    Optional query:
-
-        /approvals?status=PENDING
-
-        /approvals?status=APPROVED
-
-        /approvals?status=REJECTED
+    List approval requests.
     """
 
     approval_service = (
@@ -85,19 +87,22 @@ def list_approvals(
         ApprovalResponse.from_domain(
             request
         )
-        for request in requests
+        for request
+        in requests
     ]
 
 
 @router.get(
     "/{request_id}",
-    response_model=ApprovalResponse,
+    response_model=(
+        ApprovalResponse
+    ),
 )
 def get_approval(
     request_id: str,
 ) -> ApprovalResponse:
     """
-    Retrieve a HITL approval request.
+    Retrieve approval request.
     """
 
     approval_service = (
@@ -107,7 +112,8 @@ def get_approval(
     try:
 
         request = (
-            approval_service.get_request(
+            approval_service
+            .get_request(
                 request_id
             )
         )
@@ -124,20 +130,25 @@ def get_approval(
             ),
         ) from exc
 
-    return ApprovalResponse.from_domain(
-        request
+    return (
+        ApprovalResponse
+        .from_domain(
+            request
+        )
     )
 
 
 @router.post(
     "/{request_id}/approve",
-    response_model=ApprovalResponse,
+    response_model=(
+        ApprovalResponse
+    ),
 )
 def approve_request(
     request_id: str,
 ) -> ApprovalResponse:
     """
-    Approve a pending HITL request.
+    Approve and execute one HITL request.
     """
 
     approval_service = (
@@ -147,7 +158,8 @@ def approve_request(
     try:
 
         request = (
-            approval_service.approve(
+            approval_service
+            .approve(
                 request_id
             )
         )
@@ -176,20 +188,53 @@ def approve_request(
             ),
         ) from exc
 
-    return ApprovalResponse.from_domain(
-        request
+    # ----------------------------------------------------------
+    # Execute only AFTER successful human approval.
+    # ----------------------------------------------------------
+
+    try:
+
+        execution_result = (
+            _APPROVED_TOOL_EXECUTOR
+            .execute(
+                request
+            )
+        )
+
+        request.mark_execution_success(
+            execution_result
+        )
+
+    except Exception:
+
+        request.mark_execution_failure(
+            (
+                "Approved tool execution "
+                "failed."
+            )
+        )
+
+    return (
+        ApprovalResponse
+        .from_domain(
+            request
+        )
     )
 
 
 @router.post(
     "/{request_id}/reject",
-    response_model=ApprovalResponse,
+    response_model=(
+        ApprovalResponse
+    ),
 )
 def reject_request(
     request_id: str,
 ) -> ApprovalResponse:
     """
-    Reject a pending HITL request.
+    Reject request.
+
+    Rejection never executes the tool.
     """
 
     approval_service = (
@@ -199,7 +244,8 @@ def reject_request(
     try:
 
         request = (
-            approval_service.reject(
+            approval_service
+            .reject(
                 request_id
             )
         )
@@ -228,6 +274,9 @@ def reject_request(
             ),
         ) from exc
 
-    return ApprovalResponse.from_domain(
-        request
+    return (
+        ApprovalResponse
+        .from_domain(
+            request
+        )
     )
