@@ -6,7 +6,16 @@ exclusively through this client abstraction.
 
 Backend application services and Google ADK components must never
 be instantiated directly inside the Streamlit UI layer.
+
+Supported API groups:
+
+- health
+- weather planning
+- conversational weather
+- HITL approval management
 """
+
+from __future__ import annotations
 
 from typing import Any
 
@@ -15,31 +24,41 @@ from requests import Response
 from requests.exceptions import (
     ConnectionError as RequestsConnectionError,
 )
-from requests.exceptions import RequestException
-from requests.exceptions import Timeout
+from requests.exceptions import (
+    RequestException,
+    Timeout,
+)
 
 
-class WeatherApiError(Exception):
+class WeatherApiError(
+    Exception
+):
     """
-    Base exception raised by the Weather API client.
-    """
-
-
-class WeatherApiConnectionError(WeatherApiError):
-    """
-    Raised when the FastAPI backend cannot be reached.
+    Base Weather API client exception.
     """
 
 
-class WeatherApiTimeoutError(WeatherApiError):
+class WeatherApiConnectionError(
+    WeatherApiError
+):
     """
-    Raised when an API request exceeds the configured timeout.
+    Raised when FastAPI cannot be reached.
     """
 
 
-class WeatherApiResponseError(WeatherApiError):
+class WeatherApiTimeoutError(
+    WeatherApiError
+):
     """
-    Raised when the API returns an unsuccessful HTTP response.
+    Raised when a request times out.
+    """
+
+
+class WeatherApiResponseError(
+    WeatherApiError
+):
+    """
+    Raised for unsuccessful HTTP responses.
     """
 
     def __init__(
@@ -47,43 +66,35 @@ class WeatherApiResponseError(WeatherApiError):
         status_code: int,
         message: str,
     ) -> None:
-        """
-        Initialize the API response error.
 
-        Args:
-            status_code:
-                HTTP status code returned by the backend.
+        self.status_code = (
+            status_code
+        )
 
-            message:
-                Human-readable error description.
-        """
-
-        self.status_code = status_code
         self.message = message
 
         super().__init__(
-            f"Weather API returned HTTP "
-            f"{status_code}: {message}"
+            (
+                "Weather API returned HTTP "
+                f"{status_code}: {message}"
+            )
         )
 
 
 class WeatherApiClient:
     """
-    Client abstraction for the Weather Intelligence FastAPI API.
+    HTTP client for Weather Intelligence FastAPI.
 
-    The client encapsulates:
+    Responsibilities:
 
     - URL construction
-    - HTTP communication
-    - request timeout handling
-    - connection error handling
-    - HTTP response validation
+    - request execution
+    - timeout handling
+    - HTTP error handling
     - JSON decoding
-    - weather planning API communication
-    - conversational weather API communication
-
-    This prevents HTTP concerns from leaking into Streamlit
-    presentation code.
+    - weather planning
+    - conversational weather
+    - HITL approval lifecycle
     """
 
     def __init__(
@@ -91,30 +102,24 @@ class WeatherApiClient:
         base_url: str,
         timeout_seconds: float = 30.0,
     ) -> None:
+
+        self._base_url = (
+            base_url.rstrip("/")
+        )
+
+        self._timeout_seconds = (
+            timeout_seconds
+        )
+
+    # ========================================================
+    # Health
+    # ========================================================
+
+    def health(
+        self,
+    ) -> dict[str, Any]:
         """
-        Initialize the Weather API client.
-
-        Args:
-            base_url:
-                Base URL of the FastAPI backend.
-
-            timeout_seconds:
-                Maximum request duration in seconds.
-        """
-
-        self._base_url = base_url.rstrip("/")
-        self._timeout_seconds = timeout_seconds
-
-    def health(self) -> dict[str, Any]:
-        """
-        Retrieve backend health information.
-
-        Returns:
-            Health response returned by FastAPI.
-
-        Raises:
-            WeatherApiError:
-                If communication with the API fails.
+        Retrieve backend health.
         """
 
         response = self._request(
@@ -122,27 +127,20 @@ class WeatherApiClient:
             path="/health",
         )
 
-        return self._decode_json(
+        return self._decode_json_object(
             response
         )
+
+    # ========================================================
+    # Weather Planning
+    # ========================================================
 
     def get_weather_plan(
         self,
         city: str,
     ) -> dict[str, Any]:
         """
-        Retrieve a complete weather planning report.
-
-        Args:
-            city:
-                City for which weather intelligence is requested.
-
-        Returns:
-            Weather planning response returned by FastAPI.
-
-        Raises:
-            WeatherApiError:
-                If communication with the API fails.
+        Retrieve complete weather plan.
         """
 
         response = self._request(
@@ -153,9 +151,13 @@ class WeatherApiClient:
             },
         )
 
-        return self._decode_json(
+        return self._decode_json_object(
             response
         )
+
+    # ========================================================
+    # Conversational Weather
+    # ========================================================
 
     def chat(
         self,
@@ -163,38 +165,130 @@ class WeatherApiClient:
         message: str,
     ) -> dict[str, Any]:
         """
-        Send a conversational message to the weather agent.
-
-        The request is sent to the FastAPI chat endpoint.
-        Streamlit never interacts directly with Google ADK.
-
-        Args:
-            session_id:
-                Unique conversation session identifier.
-
-            message:
-                User message sent to the weather agent.
-
-        Returns:
-            Weather chat response returned by FastAPI.
-
-        Raises:
-            WeatherApiError:
-                If communication with the API fails.
+        Send one conversational request.
         """
 
         response = self._request(
             method="POST",
             path="/weather/chat",
             json={
-                "session_id": session_id,
+                "session_id": (
+                    session_id
+                ),
                 "message": message,
             },
         )
 
-        return self._decode_json(
+        return self._decode_json_object(
             response
         )
+
+    # ========================================================
+    # HITL Approvals
+    # ========================================================
+
+    def list_approvals(
+        self,
+        status: str | None = None,
+    ) -> list[
+        dict[str, Any]
+    ]:
+        """
+        List HITL approval requests.
+
+        Args:
+            status:
+                Optional status filter.
+
+                PENDING
+                APPROVED
+                REJECTED
+
+        Returns:
+            Approval response dictionaries.
+        """
+
+        params: dict[
+            str,
+            str,
+        ] = {}
+
+        if status:
+
+            params["status"] = status
+
+        response = self._request(
+            method="GET",
+            path="/approvals",
+            params=params,
+        )
+
+        return self._decode_json_list(
+            response
+        )
+
+    def get_approval(
+        self,
+        request_id: str,
+    ) -> dict[str, Any]:
+        """
+        Retrieve a single approval request.
+        """
+
+        response = self._request(
+            method="GET",
+            path=(
+                f"/approvals/{request_id}"
+            ),
+        )
+
+        return self._decode_json_object(
+            response
+        )
+
+    def approve_request(
+        self,
+        request_id: str,
+    ) -> dict[str, Any]:
+        """
+        Approve a pending HITL request.
+        """
+
+        response = self._request(
+            method="POST",
+            path=(
+                f"/approvals/"
+                f"{request_id}/approve"
+            ),
+        )
+
+        return self._decode_json_object(
+            response
+        )
+
+    def reject_request(
+        self,
+        request_id: str,
+    ) -> dict[str, Any]:
+        """
+        Reject a pending HITL request.
+        """
+
+        response = self._request(
+            method="POST",
+            path=(
+                f"/approvals/"
+                f"{request_id}/reject"
+            ),
+        )
+
+        return self._decode_json_object(
+            response
+        )
+
+    # ========================================================
+    # HTTP
+    # ========================================================
 
     def _request(
         self,
@@ -203,156 +297,237 @@ class WeatherApiClient:
         **kwargs: Any,
     ) -> Response:
         """
-        Execute an HTTP request against the FastAPI backend.
-
-        Args:
-            method:
-                HTTP method.
-
-            path:
-                API endpoint path.
-
-            **kwargs:
-                Additional arguments passed to requests.request.
-
-        Returns:
-            Successful HTTP response.
-
-        Raises:
-            WeatherApiConnectionError:
-                If the backend cannot be reached.
-
-            WeatherApiTimeoutError:
-                If the request exceeds the configured timeout.
-
-            WeatherApiResponseError:
-                If the API returns a non-success HTTP status.
-
-            WeatherApiError:
-                For other HTTP communication failures.
+        Execute HTTP request.
         """
 
-        url = f"{self._base_url}{path}"
+        url = (
+            f"{self._base_url}"
+            f"{path}"
+        )
 
         try:
-            response = requests.request(
-                method=method,
-                url=url,
-                timeout=self._timeout_seconds,
-                **kwargs,
+
+            response = (
+                requests.request(
+                    method=method,
+                    url=url,
+                    timeout=(
+                        self._timeout_seconds
+                    ),
+                    **kwargs,
+                )
             )
 
         except Timeout as exc:
+
             raise WeatherApiTimeoutError(
-                "The Weather Intelligence API request "
-                "timed out."
+                (
+                    "The Weather Intelligence "
+                    "API request timed out."
+                )
             ) from exc
 
-        except RequestsConnectionError as exc:
-            raise WeatherApiConnectionError(
-                "Unable to connect to the "
-                "Weather Intelligence API."
+        except (
+            RequestsConnectionError
+        ) as exc:
+
+            raise (
+                WeatherApiConnectionError(
+                    (
+                        "Unable to connect to "
+                        "the Weather "
+                        "Intelligence API."
+                    )
+                )
             ) from exc
 
         except RequestException as exc:
+
             raise WeatherApiError(
-                "Unexpected error while communicating "
-                "with the Weather Intelligence API."
+                (
+                    "Unexpected error while "
+                    "communicating with the "
+                    "Weather Intelligence API."
+                )
             ) from exc
 
         if not response.ok:
-            message = self._extract_error_message(
-                response
+
+            message = (
+                self._extract_error_message(
+                    response
+                )
             )
 
-            raise WeatherApiResponseError(
-                status_code=response.status_code,
-                message=message,
+            raise (
+                WeatherApiResponseError(
+                    status_code=(
+                        response.status_code
+                    ),
+                    message=message,
+                )
             )
 
         return response
 
+    # ========================================================
+    # JSON Decoding
+    # ========================================================
+
     @staticmethod
-    def _decode_json(
+    def _decode_json_object(
         response: Response,
     ) -> dict[str, Any]:
         """
-        Decode a successful JSON API response.
-
-        Args:
-            response:
-                Successful HTTP response.
-
-        Returns:
-            Parsed JSON dictionary.
-
-        Raises:
-            WeatherApiError:
-                If the response does not contain valid JSON or
-                has an unexpected response structure.
+        Decode JSON object response.
         """
 
         try:
+
             payload = response.json()
 
         except ValueError as exc:
+
             raise WeatherApiError(
-                "Weather Intelligence API returned "
-                "an invalid JSON response."
+                (
+                    "Weather Intelligence API "
+                    "returned invalid JSON."
+                )
             ) from exc
 
         if not isinstance(
             payload,
             dict,
         ):
+
             raise WeatherApiError(
-                "Weather Intelligence API returned "
-                "an unexpected response format."
+                (
+                    "Weather Intelligence API "
+                    "returned an unexpected "
+                    "response format."
+                )
             )
 
         return payload
+
+    @staticmethod
+    def _decode_json_list(
+        response: Response,
+    ) -> list[
+        dict[str, Any]
+    ]:
+        """
+        Decode JSON list response.
+        """
+
+        try:
+
+            payload = response.json()
+
+        except ValueError as exc:
+
+            raise WeatherApiError(
+                (
+                    "Weather Intelligence API "
+                    "returned invalid JSON."
+                )
+            ) from exc
+
+        if not isinstance(
+            payload,
+            list,
+        ):
+
+            raise WeatherApiError(
+                (
+                    "Weather Intelligence API "
+                    "returned an unexpected "
+                    "list response format."
+                )
+            )
+
+        result: list[
+            dict[str, Any]
+        ] = []
+
+        for item in payload:
+
+            if not isinstance(
+                item,
+                dict,
+            ):
+
+                raise WeatherApiError(
+                    (
+                        "Weather Intelligence "
+                        "approval response "
+                        "contains an invalid "
+                        "item."
+                    )
+                )
+
+            result.append(
+                item
+            )
+
+        return result
+
+    # ========================================================
+    # Error Extraction
+    # ========================================================
 
     @staticmethod
     def _extract_error_message(
         response: Response,
     ) -> str:
         """
-        Extract a useful error message from a failed API response.
-
-        FastAPI normally returns errors using:
-
-            {
-                "detail": "Error description"
-            }
-
-        Args:
-            response:
-                Failed HTTP response.
-
-        Returns:
-            Human-readable error message.
+        Extract useful FastAPI error.
         """
 
         try:
+
             payload = response.json()
 
             if isinstance(
                 payload,
                 dict,
             ):
+
                 detail = payload.get(
                     "detail"
                 )
 
+                if isinstance(
+                    detail,
+                    dict,
+                ):
+
+                    message = detail.get(
+                        "message"
+                    )
+
+                    if message:
+
+                        return str(
+                            message
+                        )
+
+                    return str(
+                        detail
+                    )
+
                 if detail:
+
                     return str(
                         detail
                     )
 
         except ValueError:
+
             pass
 
         if response.text:
+
             return response.text
 
         return "Unknown API error."

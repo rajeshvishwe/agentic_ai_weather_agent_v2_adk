@@ -1,17 +1,22 @@
 """
 In-memory HITL approval service.
 
-This service manages ApprovalRequest objects for Phase 9.5.
+This service manages ApprovalRequest objects.
 
-The in-memory implementation is intentionally simple and suitable for
-local development and testing.
+The implementation is intentionally lightweight for local
+development and testing.
 
-A distributed persistence layer can later replace this implementation
-without changing the approval domain model.
+Responsibilities:
 
-Prometheus metrics record approval-request creation and final approval
-outcomes without exposing request identifiers, tool arguments, or other
-potentially sensitive values.
+- create approval requests
+- retrieve approval requests
+- list approval requests
+- approve requests
+- reject requests
+- emit Prometheus HITL metrics
+
+A persistent implementation such as Redis or Firestore can later
+replace this service without changing the approval domain model.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from typing import Any
 
 from weather_intelligence_agent_v2.guardrails.approval_models import (
     ApprovalRequest,
+    ApprovalStatus,
 )
 from weather_intelligence_agent_v2.guardrails.config.hitl_policy import (
     ApprovalLevel,
@@ -32,17 +38,7 @@ from weather_intelligence_agent_v2.observability.security_metrics import (
 
 class ApprovalService:
     """
-    Manage human approval requests.
-
-    The service currently stores requests in application memory.
-
-    It supports:
-
-    - creating approval requests
-    - retrieving requests
-    - approving requests
-    - rejecting requests
-    - emitting HITL Prometheus metrics
+    Manage Human-in-the-Loop approval requests.
     """
 
     def __init__(self) -> None:
@@ -50,22 +46,17 @@ class ApprovalService:
         Initialize the in-memory approval store.
         """
 
-        self._requests: dict[str, ApprovalRequest] = {}
+        self._requests: dict[
+            str,
+            ApprovalRequest,
+        ] = {}
 
     @staticmethod
     def _approval_level_label(
         approval_level: ApprovalLevel,
     ) -> str:
         """
-        Return a stable Prometheus label for an approval level.
-
-        Args:
-            approval_level:
-                HITL approval level.
-
-        Returns:
-            str:
-                Stable approval-level label.
+        Return stable metric label for approval level.
         """
 
         value = getattr(
@@ -92,27 +83,17 @@ class ApprovalService:
         approval_level: ApprovalLevel,
     ) -> ApprovalRequest:
         """
-        Create a pending approval request.
-
-        Args:
-            tool_name:
-                Tool awaiting approval.
-
-            arguments:
-                Tool execution arguments.
-
-            approval_level:
-                Required approval level.
-
-        Returns:
-            ApprovalRequest:
-                Newly created pending request.
+        Create a new pending approval request.
         """
 
         request = ApprovalRequest(
             tool_name=tool_name,
-            arguments=dict(arguments),
-            approval_level=approval_level,
+            arguments=dict(
+                arguments
+            ),
+            approval_level=(
+                approval_level
+            ),
         )
 
         self._requests[
@@ -120,8 +101,10 @@ class ApprovalService:
         ] = request
 
         HITL_APPROVAL_REQUESTS_TOTAL.labels(
-            approval_level=self._approval_level_label(
-                approval_level
+            approval_level=(
+                self._approval_level_label(
+                    approval_level
+                )
             ),
         ).inc()
 
@@ -134,28 +117,65 @@ class ApprovalService:
         """
         Retrieve an approval request.
 
-        Args:
-            request_id:
-                Unique request identifier.
-
-        Returns:
-            ApprovalRequest:
-                Matching approval request.
-
         Raises:
             KeyError:
                 If the request does not exist.
         """
 
         try:
+
             return self._requests[
                 request_id
             ]
 
         except KeyError as exc:
+
             raise KeyError(
                 "Approval request was not found."
             ) from exc
+
+    def list_requests(
+        self,
+        status: ApprovalStatus | None = None,
+    ) -> list[ApprovalRequest]:
+        """
+        List approval requests.
+
+        Args:
+            status:
+                Optional status filter.
+
+                Examples:
+
+                PENDING
+                APPROVED
+                REJECTED
+
+                None returns all requests.
+
+        Returns:
+            Approval requests ordered newest first.
+        """
+
+        requests = list(
+            self._requests.values()
+        )
+
+        if status is not None:
+
+            requests = [
+                request
+                for request in requests
+                if request.status == status
+            ]
+
+        return sorted(
+            requests,
+            key=lambda request: (
+                request.created_at
+            ),
+            reverse=True,
+        )
 
     def approve(
         self,
@@ -163,14 +183,6 @@ class ApprovalService:
     ) -> ApprovalRequest:
         """
         Approve a pending request.
-
-        Args:
-            request_id:
-                Request identifier.
-
-        Returns:
-            ApprovalRequest:
-                Updated approved request.
         """
 
         request = self.get_request(
@@ -191,14 +203,6 @@ class ApprovalService:
     ) -> ApprovalRequest:
         """
         Reject a pending request.
-
-        Args:
-            request_id:
-                Request identifier.
-
-        Returns:
-            ApprovalRequest:
-                Updated rejected request.
         """
 
         request = self.get_request(

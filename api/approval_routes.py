@@ -1,24 +1,35 @@
 """
 FastAPI routes for Human-in-the-Loop approval management.
 
-These endpoints allow a human operator to:
+Endpoints support:
 
-- inspect a pending approval request
-- approve a request
-- reject a request
+- listing approval requests
+- inspecting one approval request
+- approving a pending request
+- rejecting a pending request
 
-This module does not execute approved tools yet. It manages only the
-approval lifecycle.
+Important:
 
-Tool resumption/execution will be introduced in a later HITL phase.
+This phase manages the approval lifecycle only.
+
+Approval does not yet automatically resume or execute the blocked
+Google ADK tool operation.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Query,
+    status,
+)
 
 from weather_intelligence_agent_v2.guardrails.adk_tool_guardrail_callback import (
     get_approval_service,
+)
+from weather_intelligence_agent_v2.guardrails.approval_models import (
+    ApprovalStatus,
 )
 from weather_intelligence_agent_v2.schemas.approval_schema import (
     ApprovalResponse,
@@ -27,8 +38,55 @@ from weather_intelligence_agent_v2.schemas.approval_schema import (
 
 router = APIRouter(
     prefix="/approvals",
-    tags=["HITL Approvals"],
+    tags=[
+        "HITL Approvals"
+    ],
 )
+
+
+@router.get(
+    "",
+    response_model=list[
+        ApprovalResponse
+    ],
+)
+def list_approvals(
+    approval_status: (
+        ApprovalStatus
+        | None
+    ) = Query(
+        default=None,
+        alias="status",
+    ),
+) -> list[ApprovalResponse]:
+    """
+    List Human-in-the-Loop approval requests.
+
+    Optional query:
+
+        /approvals?status=PENDING
+
+        /approvals?status=APPROVED
+
+        /approvals?status=REJECTED
+    """
+
+    approval_service = (
+        get_approval_service()
+    )
+
+    requests = (
+        approval_service.list_requests(
+            status=approval_status
+        )
+    )
+
+    return [
+        ApprovalResponse.from_domain(
+            request
+        )
+        for request in requests
+    ]
 
 
 @router.get(
@@ -40,30 +98,30 @@ def get_approval(
 ) -> ApprovalResponse:
     """
     Retrieve a HITL approval request.
-
-    Args:
-        request_id:
-            Unique approval request identifier.
-
-    Returns:
-        ApprovalResponse:
-            Current approval request state.
-
-    Raises:
-        HTTPException:
-            If the approval request does not exist.
     """
 
-    approval_service = get_approval_service()
+    approval_service = (
+        get_approval_service()
+    )
 
     try:
-        request = approval_service.get_request(
-            request_id
+
+        request = (
+            approval_service.get_request(
+                request_id
+            )
         )
+
     except KeyError as exc:
+
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Approval request was not found.",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Approval request was "
+                "not found."
+            ),
         ) from exc
 
     return ApprovalResponse.from_domain(
@@ -80,35 +138,42 @@ def approve_request(
 ) -> ApprovalResponse:
     """
     Approve a pending HITL request.
-
-    Args:
-        request_id:
-            Unique approval request identifier.
-
-    Returns:
-        ApprovalResponse:
-            Updated approved request.
-
-    Raises:
-        HTTPException:
-            If the request does not exist or has already been resolved.
     """
 
-    approval_service = get_approval_service()
+    approval_service = (
+        get_approval_service()
+    )
 
     try:
-        request = approval_service.approve(
-            request_id
+
+        request = (
+            approval_service.approve(
+                request_id
+            )
         )
+
     except KeyError as exc:
+
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Approval request was not found.",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Approval request was "
+                "not found."
+            ),
         ) from exc
+
     except ValueError as exc:
+
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Approval request has already been resolved.",
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=(
+                "Approval request has "
+                "already been resolved."
+            ),
         ) from exc
 
     return ApprovalResponse.from_domain(
@@ -125,35 +190,42 @@ def reject_request(
 ) -> ApprovalResponse:
     """
     Reject a pending HITL request.
-
-    Args:
-        request_id:
-            Unique approval request identifier.
-
-    Returns:
-        ApprovalResponse:
-            Updated rejected request.
-
-    Raises:
-        HTTPException:
-            If the request does not exist or has already been resolved.
     """
 
-    approval_service = get_approval_service()
+    approval_service = (
+        get_approval_service()
+    )
 
     try:
-        request = approval_service.reject(
-            request_id
+
+        request = (
+            approval_service.reject(
+                request_id
+            )
         )
+
     except KeyError as exc:
+
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Approval request was not found.",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Approval request was "
+                "not found."
+            ),
         ) from exc
+
     except ValueError as exc:
+
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Approval request has already been resolved.",
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=(
+                "Approval request has "
+                "already been resolved."
+            ),
         ) from exc
 
     return ApprovalResponse.from_domain(
