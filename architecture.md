@@ -1,3 +1,5 @@
+--for ADK: http://127.0.0.1:8000 
+
 --to start backend server & trigger UI:
 
 --To start server: (in parent directory) in mac-os
